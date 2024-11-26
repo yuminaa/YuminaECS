@@ -42,13 +42,4 @@ jobs:
 
       - name: Run Tests
         run: |
-          luau run-tests.luau > test-output.log 2>&1
-
-          if grep -q "\[ FAILED \]" test-output.log; then
-            echo "Test suite contains failures!" >&2
-            cat test-output.log
-            exit 1
-          fi
-
-          # Print the test output for debugging purposes
-          cat test-output.log
+          make test
