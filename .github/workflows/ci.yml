@@ -1,0 +1,54 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  styling:
+    name: styling
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+
+    steps:
+      - name: checkout project
+        uses: actions/checkout@v4.2.1
+
+      - name: Install aftman
+        uses: ok-nick/setup-aftman@v0.4.2
+        with:
+          token: ${{ SECRETS.GITHUB_TOKEN }}
+
+      - name: StyLua
+        uses: JohnnyMorganz/stylua-action@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          version: latest
+          args: yumina.luau
+
+  testing:
+    name: Testing
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Project
+        uses: actions/checkout@v4
+
+      - name: Install Luau
+        uses: encodedvenom/install-luau@v4.2
+        with:
+          version: "0.651"
+
+      - name: Run Tests
+        run: |
+          luau run-tests.luau > test-output.log 2>&1
+
+          if grep -q "\[ FAILED \]" test-output.log; then
+            echo "Test suite contains failures!" >&2
+            cat test-output.log
+            exit 1
+          fi
+
+          # Print the test output for debugging purposes
+          cat test-output.log

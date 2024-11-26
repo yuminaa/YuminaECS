@@ -1,0 +1,14 @@
+{
+  "luau-lsp.sourcemap.enabled": false,
+  "luau-lsp.require.directoryAliases": {
+    "@yumina": "./yumina.luau",
+    "@test_runner": "./modules/test_runner.luau",
+    "@tests": "./tests"
+  },
+  "editor.formatOnSave": true,
+  "stylua.searchParentDirectories": true,
+  "prettier.tabWidth": 2,
+  "[luau][lua]": {
+    "editor.defaultFormatter": "JohnnyMorganz.stylua"
+  }
+}

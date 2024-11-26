@@ -1,0 +1,9 @@
+[submodule "vendor/ecr"]
+	path = vendor/ecr
+	url = https://github.com/centau/ecr.git
+[submodule "vendor/matter"]
+	path = vendor/matter
+	url = https://github.com/matter-ecs/matter.git
+[submodule "vendor/jecs"]
+	path = vendor/jecs
+	url = https://github.com/Ukendio/jecs.git
