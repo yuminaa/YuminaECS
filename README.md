@@ -2,10 +2,15 @@
 
 Yumina is a high-performance Entity Component System (ECS) library written in Luau.
 
+> [!WARNING]
+> Documentation is not yet made so please be careful using the library.
+
 ## Philosophy
+
 Yumina aims to provide users with minimal and robust boilerplate while being performant. In short, users can define their own policies.
 
 ## Features
+
 - Lightweight Entity Component System
 - Flexible component queries
 - Resource management system
@@ -16,27 +21,32 @@ Yumina aims to provide users with minimal and robust boilerplate while being per
 - Optimized bitmask-based component tracking
 
 ## Getting started
-Simply head to [src/init.luau](src/init.luau) and copy the file onto your project.
+
+Simply head to the [source](yumina.luau) and copy the file onto your project.
 
 ## Core Concepts
 
 ### Entity
+
 - Unique identifier representing an object in the system
 - 24-bit ID with 8-bit generation counter
 - Automatically recycled when despawned
 
 ### Component
+
 - Data containers attached to entities
-- Must have an ID between 1 and 64 (32 bits × 2 bitmasks)
+- Must have an ID between 1 and 96 (32 bits × 3 bitmasks)
 - Efficiently stored in archetype-based arrays
 
 ### System
+
 - Logic that operates on entities with specific component combinations
 - Uses queries to find relevant entities
 
 ## Usage
 
 ### Basic
+
 ```lua
 local world = require(path.to.Yumina)
 local components = { eat = 1 }
@@ -133,14 +143,14 @@ CheckEntity(districtId)
 
 ## Events
 ```lua
--- Component changes
+-- // Component changes
 world.OnSet:Connect(function(entity: number, componentId: number, data: any?)
-    -- Handle component change
+    -- // Handle component change
 end)
 
 -- // Archetype transitions
 world.OnTransition:Connect(function(entity: number, source: Archetype, destination: Archetype)
-    -- Handle transition
+    -- // Handle transition
 end)
 
 -- // Cache operations 
@@ -171,32 +181,10 @@ end)
 
 - `Query:With(components)` - Adds required components to query
 - `Query:Without(components)` - Excludes entities with specified components
-
-> [!INFO]
-> In testing methods
-
 - `Query:Any(components)` - Matches entities with any of the components
 
-## Debug Tools
-
-> [!NOTE]
-> In progress!
-
-```lua
-local Tools = require("Yumina").Tools
-
--- // Profiling
-Tools.Profiler.Begin()
-Tools.Profiler.Mark("category", "label")
-Tools.Profiler.End("category", "label")
-local report = Tools.Profiler.GetReport()
-
--- // Debugging
-Tools.Debugger.Log("category", "message", context)
-```
-
 ## LICENSE
-MIT. See [LICENSE](../LICENSE) for more info.
+MIT. See [LICENSE](LICENSE) for more info.
 
 ## Contributing
 Contributions are always welcomed.
