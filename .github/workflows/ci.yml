@@ -42,4 +42,6 @@ jobs:
 
       - name: Run Tests
         run: |
-          make test
+          for file in tests/*.spec.luau; do
+            luau $file
+          done
