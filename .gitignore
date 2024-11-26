@@ -2,3 +2,6 @@
 /*.rbxl.lock
 
 .DS_Store
+
+profile.out
+profile.svg

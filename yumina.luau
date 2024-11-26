@@ -489,22 +489,30 @@ function Yumina.__DespawnSingle(self: Yumina, entityId: number): ()
 	if archetype then
 		local row = archetype.entityRow[entityId]
 		local lastRow = archetype.entityCount
-		if row == lastRow then
-			for _, componentArray in archetype.componentData do
-				componentArray[row] = nil
+
+		-- Only attempt component swapping if we have valid rows
+		if row and lastRow > 0 then
+			if row == lastRow then
+				for _, componentArray in archetype.componentData do
+					componentArray[row] = nil
+				end
+			else
+				local lastEntity = archetype.entities[lastRow]
+				if lastEntity then
+					archetype.entities[row] = lastEntity
+					archetype.entityRow[lastEntity] = row
+					for _, componentArray in archetype.componentData do
+						componentArray[row] = componentArray[lastRow]
+						componentArray[lastRow] = nil
+					end
+				end
 			end
-		else
-			local lastEntity = archetype.entities[lastRow]
-			archetype.entities[row] = lastEntity
-			archetype.entityRow[lastEntity] = row
-			for _, componentArray in archetype.componentData do
-				componentArray[row] = componentArray[lastRow]
-				componentArray[lastRow] = nil
-			end
+			-- Clean up the last row regardless
+			archetype.entities[lastRow] = nil
 		end
 
+		-- Always perform these cleanup operations
 		archetype.entityCount -= 1
-		archetype.entities[lastRow] = nil
 		archetype.entityRow[entityId] = nil
 
 		if archetype.entityCount == 0 then
@@ -908,6 +916,9 @@ function Yumina.Set<T>(self: Yumina, entity: EntityId, component: ComponentId, d
 	local mask = lshift(1, bitPos)
 	if band(currentArchetype.bitmasks[maskIndex], mask) ~= 0 then
 		local row = currentArchetype.entityRow[entityId]
+		if not currentArchetype.componentData[component] then
+			currentArchetype.componentData[component] = table.create(currentArchetype.entityCount + 32)
+		end
 		currentArchetype.componentData[component][row] = data
 		currentArchetype.dirtyFlags = bor(currentArchetype.dirtyFlags, DIRTY_UPDATE)
 		self.OnSet:Fire(entity, component, data)
@@ -1146,14 +1157,15 @@ function QueryViewer.View(self: QueryViewer): () -> (EntityId?, ...any?)
 		local entities = currentArchetype.entities
 		local entityCount = #entities
 		local entityIndex = 1
-		local column = currentArchetype.componentData[componentId]
+		local componentData = currentArchetype.componentData
+		local column = componentData[componentId]
 
 		return function()
 			while true do
 				if entityIndex <= entityCount then
 					local entityId = entities[entityIndex]
 					entityIndex += 1
-					return entityId, column[entityIndex]
+					return entityId, column and column[entityIndex]
 				end
 				archIndex += 1
 				currentArchetype = self.archetypes[archIndex]
@@ -1163,7 +1175,8 @@ function QueryViewer.View(self: QueryViewer): () -> (EntityId?, ...any?)
 				entities = currentArchetype.entities
 				entityCount = #entities
 				entityIndex = 1
-				column = currentArchetype.componentData[componentId]
+				componentData = currentArchetype.componentData
+				column = componentData[componentId]
 			end
 		end
 	end
@@ -1174,8 +1187,9 @@ function QueryViewer.View(self: QueryViewer): () -> (EntityId?, ...any?)
 		local entities = currentArchetype.entities
 		local entityCount = #entities
 		local entityIndex = 1
-		local column1 = currentArchetype.componentData[c1]
-		local column2 = currentArchetype.componentData[c2]
+		local componentData = currentArchetype.componentData
+		local column1 = componentData[c1]
+		local column2 = componentData[c2]
 
 		return function()
 			while true do
@@ -1183,7 +1197,7 @@ function QueryViewer.View(self: QueryViewer): () -> (EntityId?, ...any?)
 					local entityId = entities[entityIndex]
 					local row = entityIndex
 					entityIndex += 1
-					return entityId, column1[row], column2[row]
+					return entityId, column1 and column1[row], column2 and column2[row]
 				end
 				archIndex += 1
 				currentArchetype = self.archetypes[archIndex]
@@ -1193,8 +1207,9 @@ function QueryViewer.View(self: QueryViewer): () -> (EntityId?, ...any?)
 				entities = currentArchetype.entities
 				entityCount = #entities
 				entityIndex = 1
-				column1 = currentArchetype.componentData[c1]
-				column2 = currentArchetype.componentData[c2]
+				componentData = currentArchetype.componentData
+				column1 = componentData[c1]
+				column2 = componentData[c2]
 			end
 		end
 	end
@@ -1205,9 +1220,10 @@ function QueryViewer.View(self: QueryViewer): () -> (EntityId?, ...any?)
 		local entities = currentArchetype.entities
 		local entityCount = #entities
 		local entityIndex = 1
-		local column1 = currentArchetype.componentData[c1]
-		local column2 = currentArchetype.componentData[c2]
-		local column3 = currentArchetype.componentData[c3]
+		local componentData = currentArchetype.componentData
+		local column1 = componentData[c1]
+		local column2 = componentData[c2]
+		local column3 = componentData[c3]
 
 		return function()
 			while true do
@@ -1215,7 +1231,7 @@ function QueryViewer.View(self: QueryViewer): () -> (EntityId?, ...any?)
 					local entityId = entities[entityIndex]
 					local row = entityIndex
 					entityIndex += 1
-					return entityId, column1[row], column2[row], column3[row]
+					return entityId, column1 and column1[row], column2 and column2[row], column3 and column3[row]
 				end
 				archIndex += 1
 				currentArchetype = self.archetypes[archIndex]
@@ -1225,9 +1241,10 @@ function QueryViewer.View(self: QueryViewer): () -> (EntityId?, ...any?)
 				entities = currentArchetype.entities
 				entityCount = #entities
 				entityIndex = 1
-				column1 = currentArchetype.componentData[c1]
-				column2 = currentArchetype.componentData[c2]
-				column3 = currentArchetype.componentData[c3]
+				componentData = currentArchetype.componentData
+				column1 = componentData[c1]
+				column2 = componentData[c2]
+				column3 = componentData[c3]
 			end
 		end
 	end
@@ -1238,10 +1255,11 @@ function QueryViewer.View(self: QueryViewer): () -> (EntityId?, ...any?)
 		local entities = currentArchetype.entities
 		local entityCount = #entities
 		local entityIndex = 1
-		local column1 = currentArchetype.componentData[c1]
-		local column2 = currentArchetype.componentData[c2]
-		local column3 = currentArchetype.componentData[c3]
-		local column4 = currentArchetype.componentData[c4]
+		local componentData = currentArchetype.componentData
+		local column1 = componentData[c1]
+		local column2 = componentData[c2]
+		local column3 = componentData[c3]
+		local column4 = componentData[c4]
 
 		return function()
 			while true do
@@ -1249,7 +1267,11 @@ function QueryViewer.View(self: QueryViewer): () -> (EntityId?, ...any?)
 					local entityId = entities[entityIndex]
 					local row = entityIndex
 					entityIndex += 1
-					return entityId, column1[row], column2[row], column3[row], column4[row]
+					return entityId,
+						column1 and column1[row],
+						column2 and column2[row],
+						column3 and column3[row],
+						column4 and column4[row]
 				end
 				archIndex += 1
 				currentArchetype = self.archetypes[archIndex]
@@ -1259,10 +1281,11 @@ function QueryViewer.View(self: QueryViewer): () -> (EntityId?, ...any?)
 				entities = currentArchetype.entities
 				entityCount = #entities
 				entityIndex = 1
-				column1 = currentArchetype.componentData[c1]
-				column2 = currentArchetype.componentData[c2]
-				column3 = currentArchetype.componentData[c3]
-				column4 = currentArchetype.componentData[c4]
+				componentData = currentArchetype.componentData
+				column1 = componentData[c1]
+				column2 = componentData[c2]
+				column3 = componentData[c3]
+				column4 = componentData[c4]
 			end
 		end
 	end
@@ -1274,11 +1297,12 @@ function QueryViewer.View(self: QueryViewer): () -> (EntityId?, ...any?)
 		local entities = currentArchetype.entities
 		local entityCount = #entities
 		local entityIndex = 1
-		local column1 = currentArchetype.componentData[c1]
-		local column2 = currentArchetype.componentData[c2]
-		local column3 = currentArchetype.componentData[c3]
-		local column4 = currentArchetype.componentData[c4]
-		local column5 = currentArchetype.componentData[c5]
+		local componentData = currentArchetype.componentData
+		local column1 = componentData[c1]
+		local column2 = componentData[c2]
+		local column3 = componentData[c3]
+		local column4 = componentData[c4]
+		local column5 = componentData[c5]
 
 		return function()
 			while true do
@@ -1286,7 +1310,12 @@ function QueryViewer.View(self: QueryViewer): () -> (EntityId?, ...any?)
 					local entityId = entities[entityIndex]
 					local row = entityIndex
 					entityIndex += 1
-					return entityId, column1[row], column2[row], column3[row], column4[row], column5[row]
+					return entityId,
+						column1 and column1[row],
+						column2 and column2[row],
+						column3 and column3[row],
+						column4 and column4[row],
+						column5 and column5[row]
 				end
 				archIndex += 1
 				currentArchetype = self.archetypes[archIndex]
@@ -1296,11 +1325,12 @@ function QueryViewer.View(self: QueryViewer): () -> (EntityId?, ...any?)
 				entities = currentArchetype.entities
 				entityCount = #entities
 				entityIndex = 1
-				column1 = currentArchetype.componentData[c1]
-				column2 = currentArchetype.componentData[c2]
-				column3 = currentArchetype.componentData[c3]
-				column4 = currentArchetype.componentData[c4]
-				column5 = currentArchetype.componentData[c5]
+				componentData = currentArchetype.componentData
+				column1 = componentData[c1]
+				column2 = componentData[c2]
+				column3 = componentData[c3]
+				column4 = componentData[c4]
+				column5 = componentData[c5]
 			end
 		end
 	end
@@ -1310,8 +1340,9 @@ function QueryViewer.View(self: QueryViewer): () -> (EntityId?, ...any?)
 	local entities = currentArchetype.entities
 	local entityCount = #entities
 	local components = self.components
+	local componentData = currentArchetype.componentData
 	for i, componentId in components do
-		componentArrays[i] = currentArchetype.componentData[componentId]
+		componentArrays[i] = componentData[componentId]
 	end
 
 	return function()
@@ -1320,7 +1351,7 @@ function QueryViewer.View(self: QueryViewer): () -> (EntityId?, ...any?)
 				local entityId = entities[entityIndex]
 				local row = entityIndex
 				for i = 1, numComponents do
-					componentValues[i] = componentArrays[i][row]
+					componentValues[i] = componentArrays[i] and componentArrays[i][row]
 				end
 				entityIndex += 1
 				return entityId, table.unpack(componentValues, 1, numComponents)
@@ -1335,8 +1366,9 @@ function QueryViewer.View(self: QueryViewer): () -> (EntityId?, ...any?)
 			entities = currentArchetype.entities
 			entityCount = #entities
 			entityIndex = 1
+			componentData = currentArchetype.componentData
 			for i = 1, numComponents do
-				componentArrays[i] = currentArchetype.componentData[components[i]]
+				componentArrays[i] = componentData[components[i]]
 			end
 		end
 	end
