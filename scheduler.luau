@@ -6,6 +6,6 @@
 -- // Inspired by Linux's O(1) scheduler
 -- // Maintain a min-heap for fairness of each tasks run by it
 
-local Yumina = require("./Yumina")
+local Yumina = require("@yumina")
 
 type Yumina = Yumina.Yumina

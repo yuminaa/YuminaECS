@@ -16,10 +16,10 @@ type Edge = {
 }
 
 export type Archetype = {
-	bitmasks: { [number]: number },
-	entities: { [number]: EntityId },
+	bitmasks: { number },
+	entities: { EntityId },
 	entityRow: { [EntityId]: number },
-	componentData: { [ComponentId]: { [number]: any } },
+	componentData: { [ComponentId]: { [EntityId]: any } },
 	entityCount: number,
 	dirtyFlags: number,
 	addEdges: { [ComponentId]: Edge },
@@ -229,30 +229,34 @@ Tools.Profiler._metrics = {}
 Tools.Profiler._startTimes = {}
 Tools.Profiler._enabled = CONFIG.PROFILING_MODE or false
 
-function Tools.Debugger.Log(category: string, message: string, context: any?): ()
+function Tools.Debugger.Log(category: string, message: string, context: string?): ()
 	if not DEBUG_MODE then
 		return
 	end
 	print(string.format("[Yumina:%s] %s %s", category, message, context and (" (" .. tostring(context) .. ")") or ""))
 end
 
-function Tools.Debugger.ThrowError(category: string, message: string, context: any?): ()
+function Tools.Debugger.ThrowError(category: string, message: string, context: string?): never?
 	if not DEBUG_MODE then
 		return
 	end
-	error(string.format("[Yumina:%s] %s %s", category, message, context and ("(" .. tostring(context) .. ")") or ""), 2)
+	return error(
+		string.format("[Yumina:%s] %s %s", category, message, context and ("(" .. tostring(context) .. ")") or ""),
+		2
+	)
 end
 
-function Tools.Debugger.AssertArgument(condition: boolean, errorType: string, message: string)
+function Tools.Debugger.AssertArgument(condition: boolean, errorType: string, message: string): never?
 	if not DEBUG_MODE then
 		return
 	end
 	if not condition then
-		error(string.format("[Yumina:%s] %s", errorType, message), 2)
+		return error(string.format("[Yumina:%s] %s", errorType, message), 2)
 	end
+	return
 end
 
-function Tools.Profiler.Begin()
+function Tools.Profiler.Begin(): ()
 	if not PROFILING_MODE then
 		return
 	end
@@ -261,7 +265,7 @@ function Tools.Profiler.Begin()
 	Tools.Profiler._startTimes = {}
 end
 
-function Tools.Profiler.Mark(category: string, label: string)
+function Tools.Profiler.Mark(category: string, label: string): ()
 	if not Tools.Profiler._enabled then
 		return
 	end
@@ -270,7 +274,7 @@ function Tools.Profiler.Mark(category: string, label: string)
 	Tools.Profiler._startTimes[key] = os.clock()
 end
 
-function Tools.Profiler.End(category: string, label: string)
+function Tools.Profiler.End(category: string, label: string): ()
 	if not Tools.Profiler._enabled then
 		return
 	end
@@ -507,11 +511,9 @@ function Yumina.__DespawnSingle(self: Yumina, entityId: number): ()
 					end
 				end
 			end
-			-- Clean up the last row regardless
 			archetype.entities[lastRow] = nil
 		end
 
-		-- Always perform these cleanup operations
 		archetype.entityCount -= 1
 		archetype.entityRow[entityId] = nil
 
