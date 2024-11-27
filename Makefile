@@ -13,7 +13,7 @@ analyze:
 	luau-analyze --mode=strict --formatter=gnu yumina.luau
 
 bench:
-	luau benchmarks/bench.luau --codegen -O2
+	luau benchmarks/bench.luau --codegen -O2 -g0
 
 test: analyze
 	@for file in $(TEST_FILES); do \
@@ -22,6 +22,6 @@ test: analyze
 	done
 
 profile:
-	luau benchmarks/bench.luau --profile=10000 -O2 --codegen -g0
+	luau benchmarks/bench.luau --profile=5000 -O2 --codegen -g0
 	python3 tools/perfgraph.py profile.out > profile.svg && open profile.svg
 	python3 tools/perfstat.py profile.out

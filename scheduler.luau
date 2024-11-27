@@ -4,7 +4,7 @@
 
 -- // O(1) ECS scheduler implementation
 -- // Inspired by Linux's O(1) scheduler
--- // Maintain a min-heap for fairness of each tasks run by it and possible parallelization
+-- // Maintain a min-heap for fairness of each tasks run by it
 
 local Yumina = require("./Yumina")
 

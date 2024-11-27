@@ -1,5 +1,6 @@
 {
   "aliases": {
+    "jecs": "vendor/jecs/jecs",
     "yumina": "yumina",
     "test_runner": "modules/test_runner"
   },

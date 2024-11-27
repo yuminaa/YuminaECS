@@ -1,0 +1,3 @@
+[submodule "vendor/jecs"]
+	path = vendor/jecs
+	url = https://github.com/Ukendio/jecs.git

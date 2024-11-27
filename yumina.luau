@@ -717,71 +717,90 @@ function Yumina.__FastPathMove(
 	transition: TransitionInfo,
 	newComponentsData: { [ComponentId]: any }?
 )
-	local toRow = destination.entityCount + 1
-	local fromRow = source.entityRow[entity]
+	local sourceEntityRow = source.entityRow
+	local sourceEntities = source.entities
+	local fromRow = sourceEntityRow[entity]
 	local sourceCount = source.entityCount
-
 	local dstComponents = destination.componentData
 	local srcComponents = source.componentData
-	if fromRow then
-		local expectedSize = toRow + 32
-		local needsBackfill = fromRow < sourceCount
-		local lastEntity = needsBackfill and source.entities[sourceCount]
+	local sharedComponents = transition.sharedComponents
+	local addedComponents = transition.addedComponents
+	local toRow = destination.entityCount + 1
 
-		for _, componentId in transition.sharedComponents do
-			if not srcComponents[componentId] then
-				srcComponents[componentId] = table.create(expectedSize)
-			end
-			if not dstComponents[componentId] then
-				dstComponents[componentId] = table.create(expectedSize)
-			end
+	if fromRow then
+		local needsBackfill = fromRow < sourceCount
+		local lastEntity = needsBackfill and sourceEntities[sourceCount]
+		local expectedSize = toRow + 32
+
+		for i = 1, #sharedComponents do
+			local componentId = sharedComponents[i]
 			local srcColumn = srcComponents[componentId]
-			local dstColumn = dstComponents[componentId]
-			local value = srcColumn[fromRow]
-			if not value then
-				continue
+
+			if not srcColumn then
+				srcColumn = table.create(expectedSize)
+				srcComponents[componentId] = srcColumn
 			end
-			if typeof(value) == "number" then
-				if needsBackfill then
-					local lastValue = srcColumn[sourceCount]
-					dstColumn[toRow] = value
-					srcColumn[fromRow] = lastValue
+
+			local dstColumn = dstComponents[componentId]
+			if not dstColumn then
+				dstColumn = table.create(expectedSize)
+				dstComponents[componentId] = dstColumn
+			end
+
+			local value = srcColumn[fromRow]
+			if value then
+				if typeof(value) == "number" then
+					if needsBackfill then
+						local lastValue = srcColumn[sourceCount]
+						dstColumn[toRow] = value
+						srcColumn[fromRow] = lastValue
+					else
+						dstColumn[toRow] = value
+					end
 				else
 					dstColumn[toRow] = value
+					if needsBackfill then
+						srcColumn[fromRow] = srcColumn[sourceCount]
+					end
 				end
-			else
-				dstColumn[toRow] = value
-				if needsBackfill then
-					srcColumn[fromRow] = srcColumn[sourceCount]
-				end
+				srcColumn[sourceCount] = nil
 			end
-			srcColumn[sourceCount] = nil
 		end
 
-		local lastE = lastEntity :: EntityId
 		if needsBackfill and lastEntity then
-			source.entities[fromRow] = lastE
-			source.entityRow[lastE] = fromRow
+			local lastE = lastEntity :: EntityId
+			sourceEntities[fromRow] = lastE
+			sourceEntityRow[lastE] = fromRow
 		end
+
 		source.entityCount = sourceCount - 1
-		source.entities[sourceCount] = nil
-		source.entityRow[entity] = nil
-		source.dirtyFlags = bit32.bor(source.dirtyFlags, DIRTY_REMOVAL)
+		sourceEntities[sourceCount] = nil
+		sourceEntityRow[entity] = nil
+		source.dirtyFlags = bor(source.dirtyFlags, DIRTY_REMOVAL)
 	end
 
 	if newComponentsData then
-		for _, componentId in transition.addedComponents do
-			if not dstComponents[componentId] then
-				dstComponents[componentId] = table.create(toRow + 32)
+		local newSize = toRow + 32
+		for i = 1, #addedComponents do
+			local componentId = addedComponents[i]
+			local dstColumn = dstComponents[componentId]
+
+			if not dstColumn then
+				dstColumn = table.create(newSize)
+				dstComponents[componentId] = dstColumn
 			end
-			dstComponents[componentId][toRow] = newComponentsData[componentId]
+
+			dstColumn[toRow] = newComponentsData[componentId]
 		end
 	end
 
-	destination.entities[toRow] = entity
-	destination.entityRow[entity] = toRow
+	local destinationEntities = destination.entities
+	local destinationEntityRow = destination.entityRow
+
+	destinationEntities[toRow] = entity
+	destinationEntityRow[entity] = toRow
 	destination.entityCount = toRow
-	destination.dirtyFlags = bit32.bor(destination.dirtyFlags, DIRTY_ADDITION)
+	destination.dirtyFlags = bor(destination.dirtyFlags, DIRTY_ADDITION)
 	self._entityIndex[entity] = destination
 	self.OnTransition:Fire(entity, source, destination)
 end
@@ -848,104 +867,139 @@ function Yumina.Set<T>(self: Yumina, entity: EntityId, component: ComponentId, d
 	local entityId = if DEBUG_MODE then ValidateEntity(self, entity) else entity
 	local currentArchetype = self._entityIndex[entityId]
 
-	local d2 = data :: any
-	if band(component, RELATIONSHIP_COMPONENT) ~= 0 then
-		if not data then
-			if self._relations[entity] and self._relations[entity][component] then
-				local oldTarget = self._relations[entity][component].target
-				if oldTarget and self._reverseRelations[oldTarget] and self._reverseRelations[oldTarget][component] then
-					local sources = self._reverseRelations[oldTarget][component]
-					for i, sourceId in sources do
-						if sourceId == entity then
-							table.remove(sources, i)
-							break
+	-- Use arithmetic to check relationship bit and branch
+	if component >= RELATIONSHIP_COMPONENT then
+		local relations = self._relations[entity]
+		if data then
+			local targetEntity = if typeof(data) == "number" then data else (data :: any).target
+			if not relations then
+				relations = {}
+				self._relations[entity] = relations
+			end
+			relations[component] = { target = targetEntity, data = data }
+
+			local reverseRels = self._reverseRelations[targetEntity]
+			if not reverseRels then
+				local temp = {}
+				temp[component] = { entity }
+				self._reverseRelations[targetEntity] = temp
+				reverseRels = temp
+			else
+				local sources = reverseRels[component]
+				if not sources then
+					reverseRels[component] = { entity }
+				else
+					sources[#sources + 1] = entity
+				end
+			end
+		elseif relations and relations[component] then
+			local oldTarget = relations[component].target
+			if oldTarget then
+				local sources = self._reverseRelations[oldTarget][component]
+				if sources then
+					local last = sources[#sources]
+					if last == entity then
+						sources[#sources] = nil
+					else
+						for i = 1, #sources do
+							if sources[i] == entity then
+								sources[i] = last
+								sources[#sources] = nil
+								break
+							end
 						end
 					end
 				end
-				self._relations[entity][component] = nil
 			end
-			return self
+			relations[component] = nil
 		end
-
-		local targetEntity = if typeof(data) == "number" then data else d2.target
-		self._relations[entity] = self._relations[entity] or {}
-		self._relations[entity][component] = {
-			target = targetEntity,
-			data = data,
-		}
-
-		self._reverseRelations[targetEntity] = self._reverseRelations[targetEntity] or {}
-		self._reverseRelations[targetEntity][component] = self._reverseRelations[targetEntity][component] or {}
-		table.insert(self._reverseRelations[targetEntity][component], entity)
 		return self
 	end
 
-	if not currentArchetype then
-		local maskIndex, bitPos = GetComponentBits(component)
-		local bitMask = lshift(1, bitPos)
+	if currentArchetype then
+		local maskIndex = rshift(component - 1, 5) + 1
+		local bitPos = band(component - 1, 0x1F)
+		local mask = lshift(1, bitPos)
+
+		if band(currentArchetype.bitmasks[maskIndex], mask) ~= 0 then
+			local row = currentArchetype.entityRow[entityId]
+			local column = currentArchetype.componentData[component]
+			if not column then
+				column = table.create(currentArchetype.entityCount + 32)
+				currentArchetype.componentData[component] = column
+			end
+			column[row] = data
+			currentArchetype.dirtyFlags = bor(currentArchetype.dirtyFlags, DIRTY_UPDATE)
+			self.OnSet:Fire(entity, component, data)
+			return self
+		end
+
+		local edge = currentArchetype.addEdges[component]
+		if edge then
+			self:__FastPathMove(entityId, currentArchetype, edge.to, edge.transition, { [component] = data })
+			self.OnSet:Fire(entity, component, data)
+			return self
+		end
+
+		local newBits = {
+			currentArchetype.bitmasks[1],
+			currentArchetype.bitmasks[2],
+			currentArchetype.bitmasks[3],
+		}
+		newBits[maskIndex] = bor(newBits[maskIndex], mask)
+
+		local archetypeKey = GetArchetypeKey(newBits)
+		local targetArchetype = self._archetypeIndex[archetypeKey]
+		if not targetArchetype then
+			targetArchetype = self:__CreateArchetype(newBits)
+		end
+
+		local newEdge = self:__AddEdge(currentArchetype, targetArchetype, component)
+		self:__FastPathMove(entityId, currentArchetype, targetArchetype, newEdge.transition, { [component] = data })
+		self.OnSet:Fire(entity, component, data)
+		return self
+	end
+
+	local maskIndex = rshift(component - 1, 5) + 1
+	local bitPos = band(component - 1, 0x1F)
+	local bitMask = lshift(1, bitPos)
+
+	local archetypeKey = if maskIndex == 1
+		then bitMask
+		else if maskIndex == 2 then lshift(bitMask, 21) else lshift(bitMask, 42)
+
+	local existingArchetype = self._archetypeIndex[archetypeKey]
+	if existingArchetype then
+		local newRow = existingArchetype.entityCount + 1
+		existingArchetype.entityCount = newRow
+		existingArchetype.entities[newRow] = entityId
+		existingArchetype.entityRow[entityId] = newRow
+
+		local column = existingArchetype.componentData[component]
+		if not column then
+			column = table.create(32)
+			existingArchetype.componentData[component] = column
+		end
+		column[newRow] = data
+
+		existingArchetype.dirtyFlags = bor(existingArchetype.dirtyFlags, DIRTY_ADDITION)
+		self._entityIndex[entityId] = existingArchetype
+	else
 		local bitmasks = {
 			maskIndex == 1 and bitMask or 0,
 			maskIndex == 2 and bitMask or 0,
 			maskIndex == 3 and bitMask or 0,
 		}
-
-		local archetypeKey = GetArchetypeKey(bitmasks)
-		local existingArchetype = self._archetypeIndex[archetypeKey]
-		if existingArchetype then
-			local newRow = existingArchetype.entityCount + 1
-			existingArchetype.entityCount = newRow
-			existingArchetype.entities[newRow] = entityId
-			existingArchetype.entityRow[entityId] = newRow
-			existingArchetype.componentData[component][newRow] = data
-			existingArchetype.dirtyFlags = bor(existingArchetype.dirtyFlags, DIRTY_ADDITION)
-			self._entityIndex[entityId] = existingArchetype
-		else
-			local newArchetype = self:__CreateArchetype(bitmasks)
-			newArchetype.componentData[component] = table.create(32)
-			newArchetype.componentData[component][1] = data
-			newArchetype.entities[1] = entityId
-			newArchetype.entityRow[entityId] = 1
-			newArchetype.entityCount = 1
-			self._entityIndex[entityId] = newArchetype
-		end
-		self.OnSet:Fire(entity, component, data)
-		return self
+		local newArchetype = self:__CreateArchetype(bitmasks)
+		local column = table.create(32)
+		column[1] = data
+		newArchetype.componentData[component] = column
+		newArchetype.entities[1] = entityId
+		newArchetype.entityRow[entityId] = 1
+		newArchetype.entityCount = 1
+		self._entityIndex[entityId] = newArchetype
 	end
 
-	local maskIndex, bitPos = GetComponentBits(component)
-	local mask = lshift(1, bitPos)
-	if band(currentArchetype.bitmasks[maskIndex], mask) ~= 0 then
-		local row = currentArchetype.entityRow[entityId]
-		if not currentArchetype.componentData[component] then
-			currentArchetype.componentData[component] = table.create(currentArchetype.entityCount + 32)
-		end
-		currentArchetype.componentData[component][row] = data
-		currentArchetype.dirtyFlags = bor(currentArchetype.dirtyFlags, DIRTY_UPDATE)
-		self.OnSet:Fire(entity, component, data)
-		return self
-	end
-
-	local edge = currentArchetype.addEdges[component]
-	if edge then
-		self:__FastPathMove(entityId, currentArchetype, edge.to, edge.transition, { [component] = data })
-		self.OnSet:Fire(entity, component, data)
-		return self
-	end
-
-	local newBits = {
-		currentArchetype.bitmasks[1],
-		currentArchetype.bitmasks[2],
-		currentArchetype.bitmasks[3],
-	}
-	newBits[maskIndex] = bor(newBits[maskIndex], mask)
-
-	local targetArchetype = self._archetypeIndex[GetArchetypeKey(newBits)]
-	if not targetArchetype then
-		targetArchetype = self:__CreateArchetype(newBits)
-	end
-
-	local edge2 = self:__AddEdge(currentArchetype, targetArchetype, component)
-	self:__FastPathMove(entityId, currentArchetype, targetArchetype, edge2.transition, { [component] = data })
 	self.OnSet:Fire(entity, component, data)
 	return self
 end

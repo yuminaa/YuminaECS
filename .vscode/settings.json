@@ -1,9 +1,10 @@
 {
   "luau-lsp.sourcemap.enabled": false,
   "luau-lsp.require.directoryAliases": {
-    "@yumina": "./yumina.luau",
+    "@jecs": "./vendor/jecs/jecs.luau",
+    "@tests": "./tests",
     "@test_runner": "./modules/test_runner.luau",
-    "@tests": "./tests"
+    "@yumina": "./yumina.luau"
   },
   "editor.formatOnSave": true,
   "stylua.searchParentDirectories": true,

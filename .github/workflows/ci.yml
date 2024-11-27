@@ -28,7 +28,7 @@ jobs:
           args: yumina.luau
 
   testing:
-    name: Testing
+    name: testing
     runs-on: ubuntu-latest
 
     steps:
@@ -46,5 +46,5 @@ jobs:
             luau $file
           done
 
-      - name: bench
+      - name: Bench
         run: luau benchmarks/bench.luau --codegen -O2 -g0
