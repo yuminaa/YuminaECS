@@ -5,7 +5,7 @@ local TEST_F, RUN_ALL_TESTS = test_runner.TEST_F, test_runner.RUN_ALL_TESTS
 local ASSERT_EQ = test_runner.ASSERT_EQ
 
 TEST_F("query", "single_component")(function()
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 	local POSITION = 1
 
 	local e1 = ecs:Entity()
@@ -22,7 +22,7 @@ TEST_F("query", "single_component")(function()
 end)
 
 TEST_F("query", "multi_query")(function()
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 	local POSITION = 1
 	local VELOCITY = 2
 
@@ -41,7 +41,7 @@ TEST_F("query", "multi_query")(function()
 end)
 
 TEST_F("query", "exclude_components")(function()
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 	local POSITION = 1
 	local VELOCITY = 2
 
@@ -64,7 +64,7 @@ TEST_F("query", "exclude_components")(function()
 end)
 
 TEST_F("query", "component_data_access")(function()
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 	local POSITION = 1
 	local VELOCITY = 2
 
@@ -83,7 +83,7 @@ TEST_F("query", "component_data_access")(function()
 end)
 
 TEST_F("query", "query_after_remove")(function()
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 	local POSITION = 1
 	local VELOCITY = 2
 
@@ -108,7 +108,7 @@ TEST_F("query", "query_after_remove")(function()
 end)
 
 TEST_F("query", "cross_mask_query")(function()
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 	local POSITION = 1 -- First mask
 	local DAMAGE = 33 -- Second mask
 
@@ -129,7 +129,7 @@ TEST_F("query", "cross_mask_query")(function()
 end)
 
 TEST_F("query", "empty_result")(function()
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 	local POSITION = 1
 	local VELOCITY = 2
 

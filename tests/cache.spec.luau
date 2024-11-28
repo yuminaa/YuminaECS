@@ -5,7 +5,7 @@ local TEST_F, RUN_ALL_TESTS = test_runner.TEST_F, test_runner.RUN_ALL_TESTS
 local ASSERT_EQ = test_runner.ASSERT_EQ
 
 TEST_F("caching", "query_cache_invalidation")(function()
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 	local POSITION = 1
 
 	local e1 = ecs:Entity()
@@ -21,7 +21,7 @@ TEST_F("caching", "query_cache_invalidation")(function()
 end)
 
 TEST_F("caching", "edge_cache_reuse")(function()
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 	local POSITION = 1
 	local VELOCITY = 2
 
@@ -46,7 +46,7 @@ TEST_F("caching", "edge_cache_reuse")(function()
 end)
 
 TEST_F("caching", "query_cache_reuse")(function()
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 	local POSITION = 1
 
 	local cache_count = 0
@@ -69,7 +69,7 @@ TEST_F("caching", "query_cache_reuse")(function()
 end)
 
 TEST_F("caching", "cache_cleanup")(function()
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 	local POSITION = 1
 	local VELOCITY = 2
 
@@ -93,7 +93,7 @@ TEST_F("caching", "cache_cleanup")(function()
 end)
 
 TEST_F("caching", "cross_mask_cache")(function()
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 	local POSITION = 1
 	local DAMAGE = 33
 
@@ -118,7 +118,7 @@ TEST_F("caching", "cross_mask_cache")(function()
 end)
 
 TEST_F("caching", "edge_cache_persistence")(function()
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 	local POSITION = 1
 	local VELOCITY = 2
 
@@ -149,7 +149,7 @@ TEST_F("caching", "edge_cache_persistence")(function()
 end)
 
 TEST_F("caching", "relationship_cache_isolation")(function()
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 	local POSITION = 1
 	local PARENT = ecs:Pair(1)
 
@@ -171,7 +171,7 @@ TEST_F("caching", "relationship_cache_isolation")(function()
 end)
 
 TEST_F("caching", "query_cache_partial_match")(function()
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 	local POSITION = 1
 	local VELOCITY = 2
 	local DAMAGE = 33

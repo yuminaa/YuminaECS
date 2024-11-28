@@ -9,7 +9,7 @@ local VELOCITY = 2
 local DAMAGE = 33
 
 TEST_F("archetype", "single_component")(function()
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 	local entity = ecs:Entity()
 
 	ecs:Set(entity, POSITION, { x = 1, y = 2 })
@@ -23,7 +23,7 @@ TEST_F("archetype", "single_component")(function()
 end)
 
 TEST_F("archetype", "multi_component_same_mask")(function()
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 	local entity = ecs:Entity()
 
 	ecs:Set(entity, POSITION, { x = 1, y = 2 })
@@ -38,7 +38,7 @@ TEST_F("archetype", "multi_component_same_mask")(function()
 end)
 
 TEST_F("archetype", "components_across_masks")(function()
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 	local entity = ecs:Entity()
 
 	ecs:Set(entity, POSITION, { x = 1, y = 2 })
@@ -53,7 +53,7 @@ TEST_F("archetype", "components_across_masks")(function()
 end)
 
 TEST_F("archetype", "transition")(function()
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 	local entity = ecs:Entity()
 
 	ecs:Set(entity, POSITION, { x = 1, y = 2 })
@@ -67,7 +67,7 @@ TEST_F("archetype", "transition")(function()
 end)
 
 TEST_F("archetype", "component_removal")(function()
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 	local entity = ecs:Entity()
 
 	ecs:Set(entity, POSITION, { x = 1, y = 2 })
@@ -84,7 +84,7 @@ TEST_F("archetype", "component_removal")(function()
 end)
 
 TEST_F("archetype", "reuse")(function()
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 	local entity1 = ecs:Entity()
 	local entity2 = ecs:Entity()
 
@@ -101,7 +101,7 @@ TEST_F("archetype", "reuse")(function()
 end)
 
 TEST_F("archetype", "edge_caching")(function()
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 	local entity1 = ecs:Entity()
 	local entity2 = ecs:Entity()
 
@@ -125,7 +125,7 @@ TEST_F("archetype", "edge_caching")(function()
 end)
 
 TEST_F("archetype", "sequential_add_remove")(function()
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 	local entity = ecs:Entity()
 
 	ecs:Set(entity, POSITION, { x = 1, y = 2 })
@@ -148,7 +148,7 @@ TEST_F("archetype", "sequential_add_remove")(function()
 end)
 
 TEST_F("archetype", "component_override")(function()
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 	local entity = ecs:Entity()
 
 	ecs:Set(entity, POSITION, { x = 1, y = 2 })
@@ -162,7 +162,7 @@ TEST_F("archetype", "component_override")(function()
 end)
 
 TEST_F("archetype", "rapid_state_change")(function()
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 	local entity = ecs:Entity()
 
 	ecs:Set(entity, POSITION, { x = 1, y = 1 })

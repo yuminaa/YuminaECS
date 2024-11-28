@@ -9,7 +9,7 @@ local function decode_entity(encodedId)
 end
 
 test_runner.TEST_F("entity", "overflow")(function()
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 
 	local e1 = ecs:Entity()
 	local init_id = bit32.band(e1, 0x00FFFFFF)
@@ -26,7 +26,7 @@ test_runner.TEST_F("entity", "overflow")(function()
 end)
 
 TEST_F("entity", "id_exhaustion")(function()
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 
 	local entities = {}
 	local limit = 1000
@@ -44,7 +44,7 @@ TEST_F("entity", "id_exhaustion")(function()
 end)
 
 TEST_F("entity", "despawn_cleanup")(function()
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 
 	local e1 = ecs:Entity()
 	local init_id, initialGen = decode_entity(e1)
@@ -58,7 +58,7 @@ TEST_F("entity", "despawn_cleanup")(function()
 end)
 
 TEST_F("entity", "entity_count_limit")(function()
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 
 	local limit = 2 ^ 24
 	local entities = {}
@@ -72,7 +72,7 @@ TEST_F("entity", "entity_count_limit")(function()
 end)
 
 test_runner.TEST_F("entity", "stress_test_creation")(function()
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 
 	local limit = 10000
 	for _ = 1, limit do

@@ -5,7 +5,7 @@ local TEST_F, RUN_ALL_TESTS = test_runner.TEST_F, test_runner.RUN_ALL_TESTS
 local ASSERT_EQ = test_runner.ASSERT_EQ
 
 TEST_F("component", "data_integrity")(function()
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 	local DATA = 1
 	local MARKER = 2
 

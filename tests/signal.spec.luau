@@ -5,7 +5,7 @@ local TEST_F, RUN_ALL_TESTS = test_runner.TEST_F, test_runner.RUN_ALL_TESTS
 local ASSERT_EQ, ASSERT_TRUE = test_runner.ASSERT_EQ, test_runner.ASSERT_TRUE
 
 TEST_F("Signal", "connect_and_fire")(function()
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 	local POSITION = 1
 
 	local fired = false
@@ -30,7 +30,7 @@ TEST_F("Signal", "connect_and_fire")(function()
 end)
 
 TEST_F("Signal", "multi_connection")(function()
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 	local count = 0
 	local POSITION = 1
 
@@ -49,7 +49,7 @@ TEST_F("Signal", "multi_connection")(function()
 end)
 
 TEST_F("Signal", "disconnect")(function()
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 	local POSITION = 1
 	local count = 0
 
@@ -69,7 +69,7 @@ TEST_F("Signal", "disconnect")(function()
 end)
 
 TEST_F("Signal", "disconnect_all")(function()
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 	local POSITION = 1
 	local count = 0
 
@@ -90,7 +90,7 @@ TEST_F("Signal", "disconnect_all")(function()
 end)
 
 TEST_F("Signal", "connect_after_fire")(function()
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 	local POSITION = 1
 	local count = 0
 
@@ -107,7 +107,7 @@ TEST_F("Signal", "connect_after_fire")(function()
 end)
 
 TEST_F("Signal", "no_call_after_fire")(function()
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 	local count = 0
 
 	local connection
@@ -126,12 +126,12 @@ TEST_F("Signal", "no_call_after_fire")(function()
 end)
 
 TEST_F("Signal", "edge_case_empty_signal_fire")(function()
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 	ecs.OnCleanup:Fire()
 end)
 
 TEST_F("Signal", "multi_disconnect")(function()
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 	local POSITION = 1
 	local VELOCITY = 2
 	local transitions = 0
@@ -155,7 +155,7 @@ TEST_F("Signal", "multi_disconnect")(function()
 end)
 
 TEST_F("Signal", "connect_after_return", 3)(function()
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 	local POSITION = 1
 	local fired = false
 

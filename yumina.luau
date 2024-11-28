@@ -192,9 +192,8 @@ function Signal.new<T...>(): Signal<T...>
 	}, Signal) :: any
 end
 
-local CONFIG = _G.__YUMINA_CONFIG or { DEBUG_MODE = false, PROFILING_MODE = false }
+local CONFIG = _G.__YUMINA_CONFIG or { DEBUG_MODE = false }
 local DEBUG_MODE = CONFIG.DEBUG_MODE or false
-local PROFILING_MODE = CONFIG.PROFILING_MODE or false
 
 local ENTITY_MASK: number = 0x00FFFFFF
 local GENERATION_SHIFT: number = 0x18
@@ -222,21 +221,7 @@ local ERROR_TYPE = {
 local band, bor, bnot, lshift, rshift, countrz =
 	bit32.band, bit32.bor, bit32.bnot, bit32.lshift, bit32.rshift, bit32.countrz
 
-local Tools = {}
-Tools.Debugger = {}
-Tools.Profiler = {}
-Tools.Profiler._metrics = {}
-Tools.Profiler._startTimes = {}
-Tools.Profiler._enabled = CONFIG.PROFILING_MODE or false
-
-function Tools.Debugger.Log(category: string, message: string, context: string?): ()
-	if not DEBUG_MODE then
-		return
-	end
-	print(string.format("[Yumina:%s] %s %s", category, message, context and (" (" .. tostring(context) .. ")") or ""))
-end
-
-function Tools.Debugger.ThrowError(category: string, message: string, context: string?): never?
+local function ThrowError(category: string, message: string, context: string?): never?
 	if not DEBUG_MODE then
 		return
 	end
@@ -246,7 +231,7 @@ function Tools.Debugger.ThrowError(category: string, message: string, context: s
 	)
 end
 
-function Tools.Debugger.AssertArgument(condition: boolean, errorType: string, message: string): never?
+local function AssertArgument(condition: boolean, errorType: string, message: string): never?
 	if not DEBUG_MODE then
 		return
 	end
@@ -256,82 +241,10 @@ function Tools.Debugger.AssertArgument(condition: boolean, errorType: string, me
 	return
 end
 
-function Tools.Profiler.Begin(): ()
-	if not PROFILING_MODE then
-		return
-	end
-	Tools.Profiler._enabled = true
-	Tools.Profiler._metrics = {}
-	Tools.Profiler._startTimes = {}
-end
-
-function Tools.Profiler.Mark(category: string, label: string): ()
-	if not Tools.Profiler._enabled then
-		return
-	end
-
-	local key = category .. ":" .. label
-	Tools.Profiler._startTimes[key] = os.clock()
-end
-
-function Tools.Profiler.End(category: string, label: string): ()
-	if not Tools.Profiler._enabled then
-		return
-	end
-
-	local key = category .. ":" .. label
-	local startTime = Tools.Profiler._startTimes[key]
-	if not startTime then
-		return
-	end
-
-	local duration = (os.clock() - startTime) * 1000
-
-	Tools.Profiler._metrics[key] = Tools.Profiler._metrics[key]
-		or {
-			count = 0,
-			totalTime = 0,
-			minTime = math.huge,
-			maxTime = 0,
-		}
-
-	local metric = Tools.Profiler._metrics[key]
-	metric.count += 1
-	metric.totalTime += duration
-	metric.minTime = math.min(metric.minTime, duration)
-	metric.maxTime = math.max(metric.maxTime, duration)
-end
-
-function Tools.Profiler.GetReport(): string
-	if not Tools.Profiler._enabled then
-		return ""
-	end
-
-	local lines = { "Performance Report:" }
-	for key, metric in Tools.Profiler._metrics do
-		table.insert(
-			lines,
-			string.format(
-				"%s: %d calls, %.2fms avg (%.2f min, %.2f max)",
-				key,
-				metric.count,
-				metric.totalTime / metric.count,
-				metric.minTime,
-				metric.maxTime
-			)
-		)
-	end
-	return table.concat(lines, "\n")
-end
-
 local function ValidateComponentId(componentId: number): ()
 	local baseComponent = band(componentId, bnot(RELATIONSHIP_COMPONENT))
-	Tools.Debugger.AssertArgument(
-		typeof(componentId) == "number",
-		ERROR_TYPE.INVALID_COMPONENT,
-		"Component ID must be a number"
-	)
-	Tools.Debugger.AssertArgument(
+	AssertArgument(typeof(componentId) == "number", ERROR_TYPE.INVALID_COMPONENT, "Component ID must be a number")
+	AssertArgument(
 		baseComponent > 0 and baseComponent <= BITS_PER_MASK * NUM_BITMASKS,
 		ERROR_TYPE.INVALID_COMPONENT,
 		string.format("Component ID must be between 1 and %d", BITS_PER_MASK * NUM_BITMASKS)
@@ -339,17 +252,17 @@ local function ValidateComponentId(componentId: number): ()
 end
 
 local function ValidateEntity(self: Yumina, entityId: EntityId): number
-	Tools.Debugger.AssertArgument(typeof(entityId) == "number", ERROR_TYPE.INVALID_ENTITY, "Entity ID must be a number")
+	AssertArgument(typeof(entityId) == "number", ERROR_TYPE.INVALID_ENTITY, "Entity ID must be a number")
 
 	local id = band(entityId, ENTITY_MASK)
 	local generation = rshift(entityId, GENERATION_SHIFT)
 	local currentGen = self._generations[id]
 
 	if not currentGen then
-		Tools.Debugger.ThrowError(ERROR_TYPE.INVALID_ENTITY, "Entity does not exist", tostring(id))
+		ThrowError(ERROR_TYPE.INVALID_ENTITY, "Entity does not exist", tostring(id))
 	end
 	if currentGen ~= generation then
-		Tools.Debugger.ThrowError(
+		ThrowError(
 			ERROR_TYPE.INVALID_ENTITY,
 			string.format("Invalid generation (expected %d, got %d)", currentGen, generation),
 			tostring(id)
@@ -473,7 +386,7 @@ function Yumina.Entity(self: Yumina): EntityId
 	return bor(lshift(generation, GENERATION_SHIFT), entityId)
 end
 
-function Yumina.__DespawnSingle(self: Yumina, entityId: number): ()
+local function __DespawnSingle(self: Yumina, entityId: number): ()
 	local liveIndex = self._sparseToLive[entityId]
 	if not liveIndex then
 		return
@@ -494,7 +407,6 @@ function Yumina.__DespawnSingle(self: Yumina, entityId: number): ()
 		local row = archetype.entityRow[entityId]
 		local lastRow = archetype.entityCount
 
-		-- Only attempt component swapping if we have valid rows
 		if row and lastRow > 0 then
 			if row == lastRow then
 				for _, componentArray in archetype.componentData do
@@ -540,7 +452,7 @@ function Yumina.Despawn(self: Yumina, encodedId: EntityId): ()
 	end
 
 	if not self._relations[entityId] then
-		self:__DespawnSingle(entityId)
+		__DespawnSingle(self, entityId)
 		return
 	end
 
@@ -602,11 +514,11 @@ function Yumina.Despawn(self: Yumina, encodedId: EntityId): ()
 			self._reverseRelations[currentId] = nil
 		end
 
-		self:__DespawnSingle(currentId)
+		__DespawnSingle(self, entityId)
 	end
 end
 
-function Yumina.__CreateArchetype(self: Yumina, bitmasks: { number }): Archetype
+local function __CreateArchetype(self: Yumina, bitmasks: { number }): Archetype
 	local archetype = {
 		bitmasks = bitmasks,
 		componentData = {},
@@ -624,7 +536,7 @@ function Yumina.__CreateArchetype(self: Yumina, bitmasks: { number }): Archetype
 	return archetype
 end
 
-local function CreateTransitionInfo(self: Yumina, source: Archetype, destination: Archetype): TransitionInfo
+local function __CreateTransitionInfo(self: Yumina, source: Archetype, destination: Archetype): TransitionInfo
 	local transitionKey = GetTransitionKey(source.bitmasks, destination.bitmasks)
 	local cachedTransition = self._edgeCache[transitionKey]
 	if cachedTransition then
@@ -672,14 +584,14 @@ local function CreateTransitionInfo(self: Yumina, source: Archetype, destination
 	return transition
 end
 
-function Yumina.__AddEdge(self: Yumina, from: Archetype, to: Archetype, componentId: ComponentId): Edge
+local function __AddEdge(self: Yumina, from: Archetype, to: Archetype, componentId: ComponentId): Edge
 	local addEdge = {
 		from = from,
 		to = to,
 		next = nil,
 		prev = nil,
 		componentId = componentId,
-		transition = CreateTransitionInfo(self, from, to),
+		transition = __CreateTransitionInfo(self, from, to),
 	} :: Edge
 
 	local removeEdge = {
@@ -688,7 +600,7 @@ function Yumina.__AddEdge(self: Yumina, from: Archetype, to: Archetype, componen
 		next = nil,
 		prev = nil,
 		componentId = componentId,
-		transition = CreateTransitionInfo(self, to, from),
+		transition = __CreateTransitionInfo(self, to, from),
 	} :: Edge
 
 	if to.edgeRefs.next then
@@ -711,7 +623,7 @@ function Yumina.__AddEdge(self: Yumina, from: Archetype, to: Archetype, componen
 	return addEdge
 end
 
-function Yumina.__FastPathMove(
+local function __FastPathMove(
 	self: Yumina,
 	entity: EntityId,
 	source: Archetype,
@@ -938,7 +850,7 @@ function Yumina.Set<T>(self: Yumina, entity: EntityId, component: ComponentId, d
 
 		local edge = currentArchetype.addEdges[component]
 		if edge then
-			self:__FastPathMove(entityId, currentArchetype, edge.to, edge.transition, { [component] = data })
+			__FastPathMove(self, entityId, currentArchetype, edge.to, edge.transition, { [component] = data })
 			self.OnSet:Fire(entity, component, data)
 			return self
 		end
@@ -953,11 +865,11 @@ function Yumina.Set<T>(self: Yumina, entity: EntityId, component: ComponentId, d
 		local archetypeKey = GetArchetypeKey(newBits)
 		local targetArchetype = self._archetypeIndex[archetypeKey]
 		if not targetArchetype then
-			targetArchetype = self:__CreateArchetype(newBits)
+			targetArchetype = __CreateArchetype(self, newBits)
 		end
 
-		local newEdge = self:__AddEdge(currentArchetype, targetArchetype, component)
-		self:__FastPathMove(entityId, currentArchetype, targetArchetype, newEdge.transition, { [component] = data })
+		local newEdge = __AddEdge(self, currentArchetype, targetArchetype, component)
+		__FastPathMove(self, entityId, currentArchetype, targetArchetype, newEdge.transition, { [component] = data })
 		self.OnSet:Fire(entity, component, data)
 		return self
 	end
@@ -992,7 +904,7 @@ function Yumina.Set<T>(self: Yumina, entity: EntityId, component: ComponentId, d
 			maskIndex == 2 and bitMask or 0,
 			maskIndex == 3 and bitMask or 0,
 		}
-		local newArchetype = self:__CreateArchetype(bitmasks)
+		local newArchetype = __CreateArchetype(self, bitmasks)
 		local column = table.create(32)
 		column[1] = data
 		newArchetype.componentData[component] = column
@@ -1052,7 +964,7 @@ function Yumina.Remove(self: Yumina, entity: EntityId, component: ComponentId): 
 
 	local edge = currentArchetype.removeEdges[component]
 	if edge then
-		self:__FastPathMove(entityId, currentArchetype, edge.to, edge.transition)
+		__FastPathMove(self, entityId, currentArchetype, edge.to, edge.transition)
 		return self
 	end
 
@@ -1061,11 +973,11 @@ function Yumina.Remove(self: Yumina, entity: EntityId, component: ComponentId): 
 
 	local targetArchetype = self._archetypeIndex[GetArchetypeKey(newBits)]
 	if not targetArchetype then
-		targetArchetype = self:__CreateArchetype(newBits)
+		targetArchetype = __CreateArchetype(self, newBits)
 	end
 
-	local edge2 = self:__AddEdge(targetArchetype, currentArchetype, component)
-	self:__FastPathMove(entityId, currentArchetype, edge2.from, edge2.transition)
+	local edge2 = __AddEdge(self, targetArchetype, currentArchetype, component)
+	__FastPathMove(self, entityId, currentArchetype, edge2.from, edge2.transition)
 	return self
 end
 
@@ -1083,7 +995,7 @@ export type QueryViewer = typeof(setmetatable({
 	excludeBitmasks = {} :: { number },
 }, QueryViewer))
 
-function QueryViewer.new(q: {
+local function __NewQuery(q: {
 	archetypes: { Archetype },
 	components: { ComponentId },
 	includeBitmasks: { number },
@@ -1100,11 +1012,7 @@ end
 ]]
 function QueryViewer.With(self: QueryViewer, componentIds: { ComponentId }): QueryViewer
 	if _G.__YUMINA_DEBUG then
-		Tools.Debugger.AssertArgument(
-			#componentIds > 0,
-			ERROR_TYPE.QUERY_ERROR,
-			"Must provide at least one component ID"
-		)
+		AssertArgument(#componentIds > 0, ERROR_TYPE.QUERY_ERROR, "Must provide at least one component ID")
 	end
 
 	for _, componentId in componentIds do
@@ -1156,11 +1064,7 @@ end
 ]]
 function QueryViewer.Without(self: QueryViewer, componentIds: { ComponentId }): QueryViewer
 	if _G.__YUMINA_DEBUG then
-		Tools.Debugger.AssertArgument(
-			#componentIds > 0,
-			ERROR_TYPE.QUERY_ERROR,
-			"Must provide at least one component ID"
-		)
+		AssertArgument(#componentIds > 0, ERROR_TYPE.QUERY_ERROR, "Must provide at least one component ID")
 	end
 
 	for _, componentId in componentIds do
@@ -1463,7 +1367,7 @@ function Yumina.Query(self: Yumina, components: { ComponentId }): QueryViewer
 			end
 		end
 
-		local query = QueryViewer.new({
+		local query = __NewQuery({
 			archetypes = result,
 			includeBitmasks = {
 				maskIndex == 1 and bitMask or 0,
@@ -1506,7 +1410,7 @@ function Yumina.Query(self: Yumina, components: { ComponentId }): QueryViewer
 			end
 		end
 
-		local query = QueryViewer.new({
+		local query = __NewQuery({
 			archetypes = result,
 			includeBitmasks = {
 				mask1,
@@ -1547,7 +1451,7 @@ function Yumina.Query(self: Yumina, components: { ComponentId }): QueryViewer
 		end
 	end
 
-	local query = QueryViewer.new({
+	local query = __NewQuery({
 		archetypes = result,
 		includeBitmasks = queryBitmasks,
 		excludeBitmasks = { 0, 0, 0 },
@@ -1574,7 +1478,7 @@ end
 ]]
 function Yumina.Cleanup(self: Yumina): ()
 	if self._nextId >= ENTITY_MASK then
-		Tools.Debugger.ThrowError(ERROR_TYPE.MEMORY_ERROR, "Entity ID space exhausted")
+		ThrowError(ERROR_TYPE.MEMORY_ERROR, "Entity ID space exhausted")
 	end
 
 	local dirtyArchetypes = {}
@@ -1602,12 +1506,6 @@ function Yumina.Cleanup(self: Yumina): ()
 
 				local transitionKey = GetTransitionKey(edge.from.bitmasks, edge.to.bitmasks)
 				self._edgeCache[transitionKey] = nil
-			elseif DEBUG_MODE then
-				Tools.Debugger.Log(
-					"CLEANUP",
-					"Found corrupted edge reference",
-					string.format("archetype: %d, component: %d", id, componentId)
-				)
 			end
 		end
 
@@ -1668,7 +1566,4 @@ function Yumina.Cleanup(self: Yumina): ()
 	self.OnCleanup:Fire()
 end
 
-return {
-	ECS = Yumina,
-	Tools = Tools,
-}
+return Yumina

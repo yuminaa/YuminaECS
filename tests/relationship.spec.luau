@@ -5,7 +5,7 @@ local TEST_F, RUN_ALL_TESTS = test_runner.TEST_F, test_runner.RUN_ALL_TESTS
 local ASSERT_EQ, ASSERT_TRUE, ASSERT_FALSE = test_runner.ASSERT_EQ, test_runner.ASSERT_TRUE, test_runner.ASSERT_FALSE
 
 TEST_F("relationship", "relationship_cycles")(function()
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 	local PARENT = ecs:Pair(1)
 
 	local e1 = ecs:Entity()
@@ -30,7 +30,7 @@ TEST_F("relationship", "relationship_cycles")(function()
 end)
 
 TEST_F("relationship", "cyclic_cleanup")(function()
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 	local PARENT = ecs:Pair(1)
 
 	local e1 = ecs:Entity()
@@ -48,7 +48,7 @@ TEST_F("relationship", "cyclic_cleanup")(function()
 end)
 
 TEST_F("relationship", "remove_and_read")(function()
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 	local PARENT = ecs:Pair(1)
 
 	local e1 = ecs:Entity()
@@ -68,7 +68,7 @@ TEST_F("relationship", "remove_and_read")(function()
 end)
 
 TEST_F("relationship", "multiple_relationships")(function()
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 	local PARENT = ecs:Pair(1)
 	local FRIEND = ecs:Pair(2)
 
@@ -87,7 +87,7 @@ TEST_F("relationship", "multiple_relationships")(function()
 end)
 
 TEST_F("relationship", "get_related_entities")(function()
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 	local PARENT = ecs:Pair(1)
 
 	local parent = ecs:Entity()
@@ -104,7 +104,7 @@ TEST_F("relationship", "get_related_entities")(function()
 end)
 
 TEST_F("relationship", "despawn_cascade")(function()
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 	local PARENT = ecs:Pair(1)
 	local FRIEND = ecs:Pair(2)
 
@@ -124,7 +124,7 @@ TEST_F("relationship", "despawn_cascade")(function()
 end)
 
 TEST_F("relationship", "relationship_data_storage")(function()
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 	local PARENT = ecs:Pair(1)
 
 	local e1 = ecs:Entity()
@@ -140,7 +140,7 @@ TEST_F("relationship", "relationship_data_storage")(function()
 end)
 
 TEST_F("relationship", "multiple_reverse_relationships")(function()
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 	local PARENT = ecs:Pair(1)
 
 	local target = ecs:Entity()
