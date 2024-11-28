@@ -7,7 +7,7 @@ local N = 2 ^ 17
 local bench = BENCHMARK_F("yumina-ecs", "core")
 
 do -- // Basic creation benchmarks
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 	local entities = {}
 
 	bench.CASE("entity_creation", function()
@@ -18,7 +18,7 @@ do -- // Basic creation benchmarks
 end
 
 do -- // Single component operations
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 	local entities = {}
 	local A = 1
 
@@ -52,7 +52,7 @@ do -- // Single component operations
 end
 
 do -- // Multi-component operations
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 	local entities = {}
 	local comps = { 1, 2, 3, 4 }
 
@@ -94,7 +94,7 @@ do -- // Multi-component operations
 end
 
 do -- // Get operations with different component counts
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 	local entities = {}
 	local A, B, C, D = 1, 2, 3, 4
 
@@ -128,7 +128,7 @@ do -- // Get operations with different component counts
 end
 
 do -- // Query benchmarks with different component combinations
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 	local A, B, C, D = 1, 2, 3, 4
 
 	for _ = 1, N do
@@ -161,7 +161,7 @@ do -- // Query benchmarks with different component combinations
 end
 
 do -- // Query with data checks and retrieval
-	local ecs = yumina.ECS.new()
+	local ecs = yumina.new()
 	local A, B, C, D = 1, 2, 3, 4
 
 	for _ = 1, N do
@@ -189,7 +189,7 @@ end
 do -- // Fragmentation benchmarks
 	local function bench_fragmented_query(entities_per_archetype: number)
 		bench.CASE("query_" .. entities_per_archetype .. "_per_archetype", function()
-			local ecs = yumina.ECS.new()
+			local ecs = yumina.new()
 			local A, B, C, D = 1, 2, 3, 4
 
 			for _ = 1, N, entities_per_archetype do
@@ -214,7 +214,7 @@ end
 
 do -- // Mixed operations
 	bench.CASE("mixed_operations", function()
-		local ecs = yumina.ECS.new()
+		local ecs = yumina.new()
 		local A, B, C = 1, 2, 3
 
 		for _ = 1, N do

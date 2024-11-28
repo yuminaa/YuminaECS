@@ -9,7 +9,7 @@ local bench = BENCHMARK_F("ecs-comparison", "core")
 
 do -- // Basic creation benchmarks
 	local jecs_world = jecs.World.new()
-	local yumina_world = yumina.ECS.new()
+	local yumina_world = yumina.new()
 	local jecs_entities, yumina_entities = {}, {}
 
 	bench.CASE("jecs_entity_creation", function()
@@ -27,7 +27,7 @@ end
 
 do -- // Single component operations
 	local jecs_world = jecs.World.new()
-	local yumina_world = yumina.ECS.new()
+	local yumina_world = yumina.new()
 	local jecs_entities, yumina_entities = {}, {}
 	local jecs_A = jecs_world:component()
 	local yumina_A = 1
@@ -88,7 +88,7 @@ end
 
 do -- // Multi-component operations
 	local jecs_world = jecs.World.new()
-	local yumina_world = yumina.ECS.new()
+	local yumina_world = yumina.new()
 	local jecs_entities, yumina_entities = {}, {}
 
 	local jecs_comps = {
@@ -142,7 +142,7 @@ end
 
 do -- // Query with different component counts
 	local jecs_world = jecs.World.new()
-	local yumina_world = yumina.ECS.new()
+	local yumina_world = yumina.new()
 
 	local jecs_components = {
 		A = jecs_world:component(),
@@ -224,7 +224,7 @@ do -- // Fragmentation benchmarks
 		end)
 
 		bench.CASE("yumina_query_" .. entities_per_archetype .. "_per_archetype", function()
-			local ecs = yumina.ECS.new()
+			local ecs = yumina.new()
 			local A, B, C, D = 1, 2, 3, 4
 
 			for _ = 1, N, entities_per_archetype do
@@ -273,7 +273,7 @@ do -- // Sparse component distribution
 		end)
 
 		bench.CASE("yumina_sparse_query_" .. density, function()
-			local ecs = yumina.ECS.new()
+			local ecs = yumina.new()
 			local comps = { 1, 2, 3, 4 }
 
 			for _ = 1, N do
@@ -316,7 +316,7 @@ do -- // Mixed operations
 	end)
 
 	bench.CASE("yumina_mixed_operations", function()
-		local ecs = yumina.ECS.new()
+		local ecs = yumina.new()
 		local A, B, C = 1, 2, 3
 
 		for _ = 1, N do
