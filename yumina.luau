@@ -1566,4 +1566,4 @@ function Yumina.Cleanup(self: Yumina): ()
 	self.OnCleanup:Fire()
 end
 
-return Yumina
+return Yumina.new()
