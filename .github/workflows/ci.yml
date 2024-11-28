@@ -45,6 +45,3 @@ jobs:
           for file in tests/*.spec.luau; do
             luau $file
           done
-
-      - name: Bench
-        run: luau benchmarks/bench.luau --codegen -O2 -g0
