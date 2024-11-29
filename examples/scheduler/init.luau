@@ -59,8 +59,8 @@ end
 
 function Scheduler.Task(self: Scheduler, config: {
 	callback: (deltaTime: number) -> (),
-	state: any?
-	}): Task
+	state: string?
+}): Task
 	local taskId = Yumina:Entity()
 
 	Yumina
@@ -159,7 +159,7 @@ function Scheduler.Sort(self: Scheduler): ()
 	end
 end
 
-function Scheduler.Update(self: Scheduler, deltaTime: number): ()
+function Scheduler.Update(self: Scheduler, deltaTime: number?): ()
 	deltaTime = deltaTime or DEFAULT_TIME_SLICE
 	table.clear(self.executable)
 

@@ -41,7 +41,7 @@ type Benchmark = {
 local tests: { Test } = {}
 local benchmarks: { Benchmark } = {}
 
-local ITERATIONS = 10
+local ITERATIONS = 5
 local WARMUP_ITERATIONS = 2
 
 local COLOR = {
@@ -60,7 +60,6 @@ local function COLOR_TEXT(color: string, text: string): string
 	return color .. text .. COLOR.RESET
 end
 
--- Assertion Functions
 local function ASSERT_EQ<T>(actual: T, expected: T): ()
 	if actual ~= expected then
 		error(string.format("ASSERT_EQ failed: Expected: %s, Actual: %s", tostring(expected), tostring(actual)), 2)

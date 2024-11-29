@@ -631,60 +631,45 @@ local function __FastPathMove(
 	transition: TransitionInfo,
 	newComponentsData: { [ComponentId]: any }?
 )
+	-- // TODO: CRITICAL: This path is causing a big performance loss
+	if band(destination.dirtyFlags, bor(DIRTY_UPDATE, DIRTY_ADDITION)) ~= 0 then
+		local transitionKey = GetTransitionKey(source.bitmasks, destination.bitmasks)
+		self._edgeCache[transitionKey] = nil
+		transition = __CreateTransitionInfo(self, source, destination)
+	end
+
 	local sourceEntityRow = source.entityRow
 	local sourceEntities = source.entities
 	local fromRow = sourceEntityRow[entity]
 	local sourceCount = source.entityCount
 	local dstComponents = destination.componentData
 	local srcComponents = source.componentData
-	local sharedComponents = transition.sharedComponents
-	local addedComponents = transition.addedComponents
 	local toRow = destination.entityCount + 1
 
 	if fromRow then
-		local needsBackfill = fromRow < sourceCount
-		local lastEntity = needsBackfill and sourceEntities[sourceCount]
-		local expectedSize = toRow + 32
-
-		for i = 1, #sharedComponents do
-			local componentId = sharedComponents[i]
+		for _, componentId in transition.sharedComponents do
 			local srcColumn = srcComponents[componentId]
-
-			if not srcColumn then
-				srcColumn = table.create(expectedSize)
-				srcComponents[componentId] = srcColumn
-			end
-
-			local dstColumn = dstComponents[componentId]
-			if not dstColumn then
-				dstColumn = table.create(expectedSize)
-				dstComponents[componentId] = dstColumn
-			end
-
-			local value = srcColumn[fromRow]
-			if value then
-				if typeof(value) == "number" then
-					if needsBackfill then
-						local lastValue = srcColumn[sourceCount]
-						dstColumn[toRow] = value
-						srcColumn[fromRow] = lastValue
-					else
-						dstColumn[toRow] = value
+			if srcColumn then
+				local value = srcColumn[fromRow]
+				if value ~= nil then
+					if not dstComponents[componentId] then
+						dstComponents[componentId] = table.create(toRow + 32)
 					end
-				else
-					dstColumn[toRow] = value
-					if needsBackfill then
-						srcColumn[fromRow] = srcColumn[sourceCount]
-					end
+					dstComponents[componentId][toRow] = value
 				end
-				srcColumn[sourceCount] = nil
 			end
 		end
 
-		if needsBackfill and lastEntity then
-			local lastE = lastEntity :: EntityId
-			sourceEntities[fromRow] = lastE
-			sourceEntityRow[lastE] = fromRow
+		local needsBackfill = fromRow < sourceCount
+		if needsBackfill then
+			local lastEntity = sourceEntities[sourceCount]
+			sourceEntities[fromRow] = lastEntity
+			sourceEntityRow[lastEntity] = fromRow
+
+			for _, srcColumn in srcComponents do
+				srcColumn[fromRow] = srcColumn[sourceCount]
+				srcColumn[sourceCount] = nil
+			end
 		end
 
 		source.entityCount = sourceCount - 1
@@ -694,25 +679,16 @@ local function __FastPathMove(
 	end
 
 	if newComponentsData then
-		local newSize = toRow + 32
-		for i = 1, #addedComponents do
-			local componentId = addedComponents[i]
-			local dstColumn = dstComponents[componentId]
-
-			if not dstColumn then
-				dstColumn = table.create(newSize)
-				dstComponents[componentId] = dstColumn
+		for componentId, value in newComponentsData do
+			if not dstComponents[componentId] then
+				dstComponents[componentId] = table.create(toRow + 32)
 			end
-
-			dstColumn[toRow] = newComponentsData[componentId]
+			dstComponents[componentId][toRow] = value
 		end
 	end
 
-	local destinationEntities = destination.entities
-	local destinationEntityRow = destination.entityRow
-
-	destinationEntities[toRow] = entity
-	destinationEntityRow[entity] = toRow
+	destination.entities[toRow] = entity
+	destination.entityRow[entity] = toRow
 	destination.entityCount = toRow
 	destination.dirtyFlags = bor(destination.dirtyFlags, DIRTY_ADDITION)
 	self._entityIndex[entity] = destination
@@ -781,7 +757,6 @@ function Yumina.Set<T>(self: Yumina, entity: EntityId, component: ComponentId, d
 	local entityId = if DEBUG_MODE then ValidateEntity(self, entity) else entity
 	local currentArchetype = self._entityIndex[entityId]
 
-	-- Use arithmetic to check relationship bit and branch
 	if component >= RELATIONSHIP_COMPONENT then
 		local relations = self._relations[entity]
 		if data then
@@ -849,7 +824,7 @@ function Yumina.Set<T>(self: Yumina, entity: EntityId, component: ComponentId, d
 		end
 
 		local edge = currentArchetype.addEdges[component]
-		if edge then
+		if edge and edge.transition then
 			__FastPathMove(self, entityId, currentArchetype, edge.to, edge.transition, { [component] = data })
 			self.OnSet:Fire(entity, component, data)
 			return self
@@ -869,7 +844,7 @@ function Yumina.Set<T>(self: Yumina, entity: EntityId, component: ComponentId, d
 		end
 
 		local newEdge = __AddEdge(self, currentArchetype, targetArchetype, component)
-		__FastPathMove(self, entityId, currentArchetype, targetArchetype, newEdge.transition, { [component] = data })
+		__FastPathMove(self, entityId, currentArchetype, targetArchetype, newEdge.transition, { [component] = data }) -- // Problematic spot
 		self.OnSet:Fire(entity, component, data)
 		return self
 	end
@@ -963,7 +938,7 @@ function Yumina.Remove(self: Yumina, entity: EntityId, component: ComponentId): 
 	end
 
 	local edge = currentArchetype.removeEdges[component]
-	if edge then
+	if edge and edge.to then
 		__FastPathMove(self, entityId, currentArchetype, edge.to, edge.transition)
 		return self
 	end
@@ -1094,7 +1069,7 @@ function QueryViewer.Without(self: QueryViewer, componentIds: { ComponentId }): 
 	return self
 end
 
-function QueryViewer.View(self: QueryViewer): () -> (EntityId?, ...any?)
+function QueryViewer.View(self: QueryViewer): () -> (EntityId?, ...any)
 	if #self.components == 0 then
 		return function()
 			return nil
