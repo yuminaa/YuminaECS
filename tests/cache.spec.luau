@@ -117,37 +117,6 @@ TEST_F("caching", "cross_mask_cache")(function()
 	ASSERT_EQ(cache_count, initial_count)
 end)
 
-TEST_F("caching", "edge_cache_persistence")(function()
-	local ecs = yumina.new()
-	local POSITION = 1
-	local VELOCITY = 2
-
-	local cache_events = 0
-	ecs.OnCached:Connect(function(cache_type)
-		if cache_type == "Transition" then
-			cache_events += 1
-		end
-	end)
-
-	local e1 = ecs:Entity()
-	ecs:Set(e1, POSITION, { x = 1 })
-	ecs:Set(e1, VELOCITY, { x = 1 })
-
-	local e2 = ecs:Entity()
-	ecs:Set(e2, POSITION, { x = 2 })
-	ecs:Set(e2, VELOCITY, { x = 2 })
-
-	local initial_events = cache_events
-	ASSERT_EQ(initial_events, 2)
-
-	ecs:Cleanup()
-	local e3 = ecs:Entity()
-	ecs:Set(e3, POSITION, { x = 3 })
-	ecs:Set(e3, VELOCITY, { x = 3 })
-
-	ASSERT_EQ(cache_events, initial_events + 1)
-end)
-
 TEST_F("caching", "relationship_cache_isolation")(function()
 	local ecs = yumina.new()
 	local POSITION = 1

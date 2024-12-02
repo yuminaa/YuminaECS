@@ -6,46 +6,23 @@ type EntityId = number
 type ComponentId = number
 type Generation = number
 
-type Edge = {
-	from: Archetype,
-	to: Archetype,
-	next: Edge?,
-	prev: Edge?,
-	componentId: ComponentId,
-	transition: TransitionInfo,
+type ColumnTransition = {
+	sourceColumns: { [ComponentId]: { any } },
+	destColumns: { [ComponentId]: { any } },
+	sharedComponents: { ComponentId },
 }
 
-export type Archetype = {
+type ArchetypeTransitionCache = {
+	[number]: ColumnTransition,
+}
+
+type Archetype = {
 	bitmasks: { number },
 	entities: { EntityId },
 	entityRow: { [EntityId]: number },
 	componentData: { [ComponentId]: { [EntityId]: any } },
 	entityCount: number,
 	dirtyFlags: number,
-	addEdges: { [ComponentId]: Edge },
-	removeEdges: { [ComponentId]: Edge },
-	edgeRefs: {
-		next: Edge?,
-		prev: Edge?,
-	},
-}
-
-type TransitionKey = number
-
-type TransitionInfo = {
-	source: Archetype,
-	destination: Archetype,
-	sharedComponents: { ComponentId },
-	addedComponents: { ComponentId },
-	removedComponents: { ComponentId },
-	frequency: number,
-}
-
-type ArchetypeEdgeCache = {
-	[TransitionKey]: {
-		to: Archetype,
-		transition: TransitionInfo,
-	},
 }
 
 type QueryCache = {
@@ -272,8 +249,7 @@ local function ValidateEntity(self: Yumina, entityId: EntityId): number
 end
 
 local function GetComponentBits(componentId: number): (number, number)
-	return rshift(componentId - 1, 5) + 1, -- // maskIndex
-		band(componentId - 1, 0x1F) -- // bitPosition
+	return rshift(componentId - 1, 5) + 1, band(componentId - 1, 0x1F)
 end
 
 local function GetArchetypeKey(bitmasks: { number }): number
@@ -281,17 +257,6 @@ local function GetArchetypeKey(bitmasks: { number }): number
 		band(bitmasks[1], 0x1FFFFF),
 		lshift(band(bitmasks[2], 0x1FFFFF), 21),
 		lshift(band(bitmasks[3], 0x3FFFFF), 42)
-	)
-end
-
-local function GetTransitionKey(sourceBitmasks: { number }, destBitmasks: { number }): number
-	return bor(
-		band(sourceBitmasks[1], 0x3FF),
-		lshift(band(sourceBitmasks[2], 0x3FF), 10),
-		lshift(band(sourceBitmasks[3], 0x3FF), 20),
-		lshift(band(destBitmasks[1], 0x3FF), 30),
-		lshift(band(destBitmasks[2], 0x3FF), 40),
-		lshift(band(destBitmasks[3], 0x3FF), 50)
 	)
 end
 
@@ -306,37 +271,31 @@ local function GetQueryKey(includeBitmasks: { number }, excludeBitmasks: { numbe
 	)
 end
 
---[[
-    @class Yumina
-    @description Core ECS implementation with archetype-based storage
-]]
 local Yumina = {}
 Yumina.__index = Yumina
 
-export type Yumina = typeof(setmetatable({
-	_archetypeIndex = {} :: { [number]: Archetype },
-	_entityIndex = {} :: { [EntityId]: Archetype },
-	_denseEntities = {},
-	_sparseToLive = {},
-	_aliveCount = 0,
-	_generations = {} :: { [EntityId]: Generation },
-	_nextId = 1 :: EntityId,
-	_edgeCache = {} :: ArchetypeEdgeCache,
-	_relations = {} :: { [EntityId]: { [ComponentId]: { target: EntityId, data: any? } } },
-	_queryCache = {} :: { [number]: QueryViewer },
-	_reverseRelations = {} :: { [EntityId]: { [ComponentId]: { EntityId } } },
+export type Yumina = typeof(setmetatable(
+	{} :: {
+		_archetypeIndex: { [number]: Archetype },
+		_entityIndex: { [EntityId]: Archetype },
+		_denseEntities: { EntityId },
+		_sparseToLive: { [EntityId]: number },
+		_aliveCount: number,
+		_generations: { [EntityId]: Generation },
+		_nextId: EntityId,
+		_columnTransitions: { [number]: ArchetypeTransitionCache },
+		_relations: { [EntityId]: { [ComponentId]: { target: EntityId, data: any? } } },
+		_queryCache: { [number]: QueryViewer },
+		_reverseRelations: { [EntityId]: { [ComponentId]: { EntityId } } },
 
-	OnSet = Signal.new() :: Signal<EntityId, ComponentId, any>,
-	OnTransition = Signal.new() :: Signal<EntityId, Archetype, Archetype>,
-	OnCached = Signal.new() :: Signal<"Transition" | "Query", number>,
-	OnCleanup = Signal.new() :: Signal<()>,
-}, Yumina))
+		OnSet: Signal<EntityId, ComponentId, any>,
+		OnTransition: Signal<EntityId, Archetype, Archetype>,
+		OnCached: Signal<"Transition" | "Query", number>,
+		OnCleanup: Signal<()>,
+	},
+	Yumina
+))
 
---[[
-    @function Yumina.new
-    @description Creates a new ECS instance
-    @return Yumina New ECS instance
-]]
 function Yumina.new(): Yumina
 	local self = setmetatable({}, Yumina)
 	self._archetypeIndex = {}
@@ -346,7 +305,7 @@ function Yumina.new(): Yumina
 	self._aliveCount = 0
 	self._generations = {}
 	self._nextId = 1
-	self._edgeCache = {}
+	self._columnTransitions = {}
 	self._queryCache = {}
 	self._relations = {}
 	self._reverseRelations = {}
@@ -358,11 +317,6 @@ function Yumina.new(): Yumina
 	return self
 end
 
---[[
-    @function Yumina.Entity
-    @description Creates a new entity with a unique ID and generation
-    @return EntityId Encoded entity ID containing both ID and generation
-]]
 function Yumina.Entity(self: Yumina): EntityId
 	local entityId: EntityId
 	local generation: Generation
@@ -439,11 +393,6 @@ local function __DespawnSingle(self: Yumina, entityId: number): ()
 	end
 end
 
---[[
-    @function Yumina.Despawn
-    @description Removes an entity and all its components
-    @param encodedId EntityId The encoded entity ID to despawn
-]]
 function Yumina.Despawn(self: Yumina, encodedId: EntityId): ()
 	local entityId = band(encodedId, ENTITY_MASK)
 	local generation = rshift(encodedId, GENERATION_SHIFT)
@@ -518,36 +467,17 @@ function Yumina.Despawn(self: Yumina, encodedId: EntityId): ()
 	end
 end
 
-local function __CreateArchetype(self: Yumina, bitmasks: { number }): Archetype
-	local archetype = {
-		bitmasks = bitmasks,
-		componentData = {},
-		entities = {},
-		entityRow = {},
-		entityCount = 0,
-		dirtyFlags = DIRTY_ADDITION,
-		addEdges = {},
-		removeEdges = {},
-		edgeRefs = { next = nil, prev = nil },
-	} :: Archetype
+local function __CreateColumnTransition(self: Yumina, source: Archetype, destination: Archetype): ColumnTransition
+	local sourceKey = GetArchetypeKey(source.bitmasks)
+	local destKey = GetArchetypeKey(destination.bitmasks)
 
-	local key = GetArchetypeKey(bitmasks)
-	self._archetypeIndex[key] = archetype
-	return archetype
-end
-
-local function __CreateTransitionInfo(self: Yumina, source: Archetype, destination: Archetype): TransitionInfo
-	local transitionKey = GetTransitionKey(source.bitmasks, destination.bitmasks)
-	local cachedTransition = self._edgeCache[transitionKey]
-	if cachedTransition then
-		return cachedTransition.transition
+	local sourceTransitions = self._columnTransitions[sourceKey]
+	if sourceTransitions and sourceTransitions[destKey] then
+		return sourceTransitions[destKey]
 	end
 
 	local shared = table.create(4)
-	local added = table.create(1)
 	local sharedCount = 0
-	local addedCount = 0
-
 	for maskIndex = 1, NUM_BITMASKS do
 		local sourceMask = source.bitmasks[maskIndex]
 		local destMask = destination.bitmasks[maskIndex]
@@ -558,69 +488,37 @@ local function __CreateTransitionInfo(self: Yumina, source: Archetype, destinati
 			local bit = countrz(sharedMask)
 			sharedCount += 1
 			shared[sharedCount] = baseComponent + bit + 1
-			sharedMask = band(sharedMask, bnot(lshift(1, bit)))
-		end
-
-		local addedMask = band(bnot(sourceMask), destMask)
-		while addedMask ~= 0 do
-			local bit = countrz(addedMask)
-			addedCount += 1
-			added[addedCount] = baseComponent + bit + 1
-			addedMask = band(addedMask, bnot(lshift(1, bit)))
+			sharedMask = sharedMask - lshift(1, bit)
 		end
 	end
 
-	local transition = {
-		source = source,
-		destination = destination,
-		sharedComponents = table.move(shared, 1, sharedCount, 1, table.create(sharedCount)),
-		addedComponents = table.move(added, 1, addedCount, 1, table.create(addedCount)),
-		removedComponents = {},
-		frequency = 0,
+	local transition: ColumnTransition = {
+		sourceColumns = source.componentData,
+		destColumns = destination.componentData,
+		sharedComponents = shared,
 	}
 
-	self._edgeCache[transitionKey] = { to = destination, transition = transition }
-	self.OnCached:Fire("Transition", transitionKey)
+	if not sourceTransitions then
+		self._columnTransitions[sourceKey] = {}
+		sourceTransitions = self._columnTransitions[sourceKey]
+	end
+	(sourceTransitions :: ArchetypeTransitionCache)[destKey] = transition
 	return transition
 end
 
-local function __AddEdge(self: Yumina, from: Archetype, to: Archetype, componentId: ComponentId): Edge
-	local addEdge = {
-		from = from,
-		to = to,
-		next = nil,
-		prev = nil,
-		componentId = componentId,
-		transition = __CreateTransitionInfo(self, from, to),
-	} :: Edge
+local function __CreateArchetype(self: Yumina, bitmasks: { number }): Archetype
+	local archetype = {
+		bitmasks = bitmasks,
+		componentData = {},
+		entities = {},
+		entityRow = {},
+		entityCount = 0,
+		dirtyFlags = DIRTY_ADDITION,
+	} :: Archetype
 
-	local removeEdge = {
-		from = to,
-		to = from,
-		next = nil,
-		prev = nil,
-		componentId = componentId,
-		transition = __CreateTransitionInfo(self, to, from),
-	} :: Edge
-
-	if to.edgeRefs.next then
-		addEdge.next = to.edgeRefs.next
-		to.edgeRefs.next.prev = addEdge
-	end
-	to.edgeRefs.next = addEdge
-	addEdge.prev = from.edgeRefs.prev
-
-	if from.edgeRefs.next then
-		removeEdge.next = from.edgeRefs.next
-		from.edgeRefs.next.prev = removeEdge
-	end
-	from.edgeRefs.next = removeEdge
-	removeEdge.prev = to.edgeRefs.prev
-
-	from.addEdges[componentId] = addEdge
-	to.removeEdges[componentId] = removeEdge
-
-	return addEdge
+	local key = GetArchetypeKey(bitmasks)
+	self._archetypeIndex[key] = archetype
+	return archetype
 end
 
 local function __FastPathMove(
@@ -628,34 +526,26 @@ local function __FastPathMove(
 	entity: EntityId,
 	source: Archetype,
 	destination: Archetype,
-	transition: TransitionInfo,
 	newComponentsData: { [ComponentId]: any }?
 )
-	-- // TODO: CRITICAL: This path is causing a big performance loss
-	if band(destination.dirtyFlags, bor(DIRTY_UPDATE, DIRTY_ADDITION)) ~= 0 then
-		local transitionKey = GetTransitionKey(source.bitmasks, destination.bitmasks)
-		self._edgeCache[transitionKey] = nil
-		transition = __CreateTransitionInfo(self, source, destination)
-	end
+	local transition = __CreateColumnTransition(self, source, destination)
 
 	local sourceEntityRow = source.entityRow
 	local sourceEntities = source.entities
 	local fromRow = sourceEntityRow[entity]
 	local sourceCount = source.entityCount
-	local dstComponents = destination.componentData
-	local srcComponents = source.componentData
 	local toRow = destination.entityCount + 1
 
 	if fromRow then
 		for _, componentId in transition.sharedComponents do
-			local srcColumn = srcComponents[componentId]
-			if srcColumn then
-				local value = srcColumn[fromRow]
+			local sourceColumn = transition.sourceColumns[componentId]
+			if sourceColumn then
+				local value = sourceColumn[fromRow]
 				if value ~= nil then
-					if not dstComponents[componentId] then
-						dstComponents[componentId] = table.create(toRow + 32)
+					if not transition.destColumns[componentId] then
+						transition.destColumns[componentId] = table.create(toRow + 32)
 					end
-					dstComponents[componentId][toRow] = value
+					transition.destColumns[componentId][toRow] = value
 				end
 			end
 		end
@@ -666,9 +556,9 @@ local function __FastPathMove(
 			sourceEntities[fromRow] = lastEntity
 			sourceEntityRow[lastEntity] = fromRow
 
-			for _, srcColumn in srcComponents do
-				srcColumn[fromRow] = srcColumn[sourceCount]
-				srcColumn[sourceCount] = nil
+			for _, sourceColumn in transition.sourceColumns do
+				sourceColumn[fromRow] = sourceColumn[sourceCount]
+				sourceColumn[sourceCount] = nil
 			end
 		end
 
@@ -680,10 +570,10 @@ local function __FastPathMove(
 
 	if newComponentsData then
 		for componentId, value in newComponentsData do
-			if not dstComponents[componentId] then
-				dstComponents[componentId] = table.create(toRow + 32)
+			if not transition.destColumns[componentId] then
+				transition.destColumns[componentId] = table.create(toRow + 32)
 			end
-			dstComponents[componentId][toRow] = value
+			transition.destColumns[componentId][toRow] = value
 		end
 	end
 
@@ -695,13 +585,6 @@ local function __FastPathMove(
 	self.OnTransition:Fire(entity, source, destination)
 end
 
---[[
-    @function Yumina.Has
-    @description Checks if an entity has a specific component
-    @param entity EntityId The entity to check
-    @param component ComponentId The component ID to check for
-    @return any? The component data if found, nil otherwise
-]]
 function Yumina.Has(self: Yumina, entity: EntityId, component: ComponentId): any?
 	local entityId = ValidateEntity(self, entity)
 	local archetype = self._entityIndex[entityId]
@@ -737,7 +620,7 @@ function Yumina.GetRelated(self: Yumina, entity: EntityId, relationComponent: Co
 	return results
 end
 
-function Yumina.Target(self: Yumina, entity: EntityId, relationComponent: ComponentId): (EntityId?, any?)
+function Yumina.Target(self: Yumina, entity: EntityId, relationComponent: ComponentId): (EntityId?, any)
 	if not self._relations[entity] or not self._relations[entity][relationComponent] then
 		return nil
 	end
@@ -745,14 +628,6 @@ function Yumina.Target(self: Yumina, entity: EntityId, relationComponent: Compon
 	return relation.target, relation.data
 end
 
---[[
-    @function Yumina.Set
-    @description Sets a component value for an entity
-    @param entity EntityId Target entity
-    @param component ComponentId Component ID to set
-    @param data T Component data
-    @return Yumina Self for chaining
-]]
 function Yumina.Set<T>(self: Yumina, entity: EntityId, component: ComponentId, data: T): Yumina
 	local entityId = if DEBUG_MODE then ValidateEntity(self, entity) else entity
 	local currentArchetype = self._entityIndex[entityId]
@@ -823,13 +698,6 @@ function Yumina.Set<T>(self: Yumina, entity: EntityId, component: ComponentId, d
 			return self
 		end
 
-		local edge = currentArchetype.addEdges[component]
-		if edge and edge.transition then
-			__FastPathMove(self, entityId, currentArchetype, edge.to, edge.transition, { [component] = data })
-			self.OnSet:Fire(entity, component, data)
-			return self
-		end
-
 		local newBits = {
 			currentArchetype.bitmasks[1],
 			currentArchetype.bitmasks[2],
@@ -843,8 +711,7 @@ function Yumina.Set<T>(self: Yumina, entity: EntityId, component: ComponentId, d
 			targetArchetype = __CreateArchetype(self, newBits)
 		end
 
-		local newEdge = __AddEdge(self, currentArchetype, targetArchetype, component)
-		__FastPathMove(self, entityId, currentArchetype, targetArchetype, newEdge.transition, { [component] = data }) -- // Problematic spot
+		__FastPathMove(self, entityId, currentArchetype, targetArchetype, { [component] = data })
 		self.OnSet:Fire(entity, component, data)
 		return self
 	end
@@ -893,13 +760,6 @@ function Yumina.Set<T>(self: Yumina, entity: EntityId, component: ComponentId, d
 	return self
 end
 
---[[
-    @function Yumina.Remove  
-    @description Removes a component from an entity
-    @param entity EntityId Target entity
-    @param component ComponentId Component to remove
-    @return Yumina Self for chaining
-]]
 function Yumina.Remove(self: Yumina, entity: EntityId, component: ComponentId): Yumina
 	local entityId = ValidateEntity(self, entity)
 
@@ -924,6 +784,7 @@ function Yumina.Remove(self: Yumina, entity: EntityId, component: ComponentId): 
 				end
 			end
 		end
+		return self
 	end
 
 	local currentArchetype = self._entityIndex[entityId]
@@ -937,13 +798,11 @@ function Yumina.Remove(self: Yumina, entity: EntityId, component: ComponentId): 
 		return self
 	end
 
-	local edge = currentArchetype.removeEdges[component]
-	if edge and edge.to then
-		__FastPathMove(self, entityId, currentArchetype, edge.to, edge.transition)
-		return self
-	end
-
-	local newBits = { currentArchetype.bitmasks[1], currentArchetype.bitmasks[2], currentArchetype.bitmasks[3] }
+	local newBits = {
+		currentArchetype.bitmasks[1],
+		currentArchetype.bitmasks[2],
+		currentArchetype.bitmasks[3],
+	}
 	newBits[maskIndex] = band(newBits[maskIndex], bnot(mask))
 
 	local targetArchetype = self._archetypeIndex[GetArchetypeKey(newBits)]
@@ -951,15 +810,10 @@ function Yumina.Remove(self: Yumina, entity: EntityId, component: ComponentId): 
 		targetArchetype = __CreateArchetype(self, newBits)
 	end
 
-	local edge2 = __AddEdge(self, targetArchetype, currentArchetype, component)
-	__FastPathMove(self, entityId, currentArchetype, edge2.from, edge2.transition)
+	__FastPathMove(self, entityId, currentArchetype, targetArchetype)
 	return self
 end
 
---[[
-    @class QueryViewer
-    @description Query iterator for filtered entity views
-]]
 local QueryViewer = {}
 QueryViewer.__index = QueryViewer
 
@@ -979,12 +833,6 @@ local function __NewQuery(q: {
 	return setmetatable(q, QueryViewer)
 end
 
---[[
-    @function QueryViewer.With
-    @description Adds required components to query
-    @param componentIds { ComponentId } Components that must be present
-    @return QueryViewer Self for chaining
-]]
 function QueryViewer.With(self: QueryViewer, componentIds: { ComponentId }): QueryViewer
 	if _G.__YUMINA_DEBUG then
 		AssertArgument(#componentIds > 0, ERROR_TYPE.QUERY_ERROR, "Must provide at least one component ID")
@@ -1031,14 +879,8 @@ function QueryViewer.With(self: QueryViewer, componentIds: { ComponentId }): Que
 	return self
 end
 
---[[
-    @function QueryViewer.Without  
-    @description Excludes components from query
-    @param componentIds { ComponentId } Components that must not be present
-    @return QueryViewer Self for chaining
-]]
 function QueryViewer.Without(self: QueryViewer, componentIds: { ComponentId }): QueryViewer
-	if _G.__YUMINA_DEBUG then
+	if DEBUG_MODE then
 		AssertArgument(#componentIds > 0, ERROR_TYPE.QUERY_ERROR, "Must provide at least one component ID")
 	end
 
@@ -1075,7 +917,6 @@ function QueryViewer.View(self: QueryViewer): () -> (EntityId?, ...any)
 			return nil
 		end
 	end
-
 	local numComponents = #self.components
 	local currentArchetype = self.archetypes[1]
 	if not currentArchetype then
@@ -1083,9 +924,6 @@ function QueryViewer.View(self: QueryViewer): () -> (EntityId?, ...any)
 			return nil
 		end
 	end
-
-	local componentArrays = table.create(numComponents)
-	local componentValues = table.create(numComponents)
 	if numComponents == 1 then
 		local componentId = self.components[1]
 		local archIndex = 1
@@ -1099,8 +937,9 @@ function QueryViewer.View(self: QueryViewer): () -> (EntityId?, ...any)
 			while true do
 				if entityIndex <= entityCount then
 					local entityId = entities[entityIndex]
+					local row = entityIndex
 					entityIndex += 1
-					return entityId, column and column[entityIndex]
+					return entityId, column[row]
 				end
 				archIndex += 1
 				currentArchetype = self.archetypes[archIndex]
@@ -1110,21 +949,18 @@ function QueryViewer.View(self: QueryViewer): () -> (EntityId?, ...any)
 				entities = currentArchetype.entities
 				entityCount = #entities
 				entityIndex = 1
-				componentData = currentArchetype.componentData
-				column = componentData[componentId]
+				column = currentArchetype.componentData[componentId]
 			end
 		end
 	end
-
 	if numComponents == 2 then
 		local c1, c2 = self.components[1], self.components[2]
 		local archIndex = 1
 		local entities = currentArchetype.entities
 		local entityCount = #entities
 		local entityIndex = 1
-		local componentData = currentArchetype.componentData
-		local column1 = componentData[c1]
-		local column2 = componentData[c2]
+		local column1 = currentArchetype.componentData[c1]
+		local column2 = currentArchetype.componentData[c2]
 
 		return function()
 			while true do
@@ -1132,7 +968,7 @@ function QueryViewer.View(self: QueryViewer): () -> (EntityId?, ...any)
 					local entityId = entities[entityIndex]
 					local row = entityIndex
 					entityIndex += 1
-					return entityId, column1 and column1[row], column2 and column2[row]
+					return entityId, column1[row], column2[row]
 				end
 				archIndex += 1
 				currentArchetype = self.archetypes[archIndex]
@@ -1142,23 +978,21 @@ function QueryViewer.View(self: QueryViewer): () -> (EntityId?, ...any)
 				entities = currentArchetype.entities
 				entityCount = #entities
 				entityIndex = 1
-				componentData = currentArchetype.componentData
+				local componentData = currentArchetype.componentData
 				column1 = componentData[c1]
 				column2 = componentData[c2]
 			end
 		end
 	end
-
 	if numComponents == 3 then
 		local c1, c2, c3 = self.components[1], self.components[2], self.components[3]
 		local archIndex = 1
 		local entities = currentArchetype.entities
 		local entityCount = #entities
 		local entityIndex = 1
-		local componentData = currentArchetype.componentData
-		local column1 = componentData[c1]
-		local column2 = componentData[c2]
-		local column3 = componentData[c3]
+		local column1 = currentArchetype.componentData[c1]
+		local column2 = currentArchetype.componentData[c2]
+		local column3 = currentArchetype.componentData[c3]
 
 		return function()
 			while true do
@@ -1166,7 +1000,7 @@ function QueryViewer.View(self: QueryViewer): () -> (EntityId?, ...any)
 					local entityId = entities[entityIndex]
 					local row = entityIndex
 					entityIndex += 1
-					return entityId, column1 and column1[row], column2 and column2[row], column3 and column3[row]
+					return entityId, column1[row], column2[row], column3[row]
 				end
 				archIndex += 1
 				currentArchetype = self.archetypes[archIndex]
@@ -1176,25 +1010,23 @@ function QueryViewer.View(self: QueryViewer): () -> (EntityId?, ...any)
 				entities = currentArchetype.entities
 				entityCount = #entities
 				entityIndex = 1
-				componentData = currentArchetype.componentData
+				local componentData = currentArchetype.componentData
 				column1 = componentData[c1]
 				column2 = componentData[c2]
 				column3 = componentData[c3]
 			end
 		end
 	end
-
 	if numComponents == 4 then
 		local c1, c2, c3, c4 = self.components[1], self.components[2], self.components[3], self.components[4]
 		local archIndex = 1
 		local entities = currentArchetype.entities
 		local entityCount = #entities
 		local entityIndex = 1
-		local componentData = currentArchetype.componentData
-		local column1 = componentData[c1]
-		local column2 = componentData[c2]
-		local column3 = componentData[c3]
-		local column4 = componentData[c4]
+		local column1 = currentArchetype.componentData[c1]
+		local column2 = currentArchetype.componentData[c2]
+		local column3 = currentArchetype.componentData[c3]
+		local column4 = currentArchetype.componentData[c4]
 
 		return function()
 			while true do
@@ -1202,11 +1034,7 @@ function QueryViewer.View(self: QueryViewer): () -> (EntityId?, ...any)
 					local entityId = entities[entityIndex]
 					local row = entityIndex
 					entityIndex += 1
-					return entityId,
-						column1 and column1[row],
-						column2 and column2[row],
-						column3 and column3[row],
-						column4 and column4[row]
+					return entityId, column1[row], column2[row], column3[row], column4[row]
 				end
 				archIndex += 1
 				currentArchetype = self.archetypes[archIndex]
@@ -1216,7 +1044,7 @@ function QueryViewer.View(self: QueryViewer): () -> (EntityId?, ...any)
 				entities = currentArchetype.entities
 				entityCount = #entities
 				entityIndex = 1
-				componentData = currentArchetype.componentData
+				local componentData = currentArchetype.componentData
 				column1 = componentData[c1]
 				column2 = componentData[c2]
 				column3 = componentData[c3]
@@ -1224,7 +1052,6 @@ function QueryViewer.View(self: QueryViewer): () -> (EntityId?, ...any)
 			end
 		end
 	end
-
 	if numComponents == 5 then
 		local c1, c2, c3, c4, c5 =
 			self.components[1], self.components[2], self.components[3], self.components[4], self.components[5]
@@ -1232,12 +1059,11 @@ function QueryViewer.View(self: QueryViewer): () -> (EntityId?, ...any)
 		local entities = currentArchetype.entities
 		local entityCount = #entities
 		local entityIndex = 1
-		local componentData = currentArchetype.componentData
-		local column1 = componentData[c1]
-		local column2 = componentData[c2]
-		local column3 = componentData[c3]
-		local column4 = componentData[c4]
-		local column5 = componentData[c5]
+		local column1 = currentArchetype.componentData[c1]
+		local column2 = currentArchetype.componentData[c2]
+		local column3 = currentArchetype.componentData[c3]
+		local column4 = currentArchetype.componentData[c4]
+		local column5 = currentArchetype.componentData[c5]
 
 		return function()
 			while true do
@@ -1245,12 +1071,7 @@ function QueryViewer.View(self: QueryViewer): () -> (EntityId?, ...any)
 					local entityId = entities[entityIndex]
 					local row = entityIndex
 					entityIndex += 1
-					return entityId,
-						column1 and column1[row],
-						column2 and column2[row],
-						column3 and column3[row],
-						column4 and column4[row],
-						column5 and column5[row]
+					return entityId, column1[row], column2[row], column3[row], column4[row], column5[row]
 				end
 				archIndex += 1
 				currentArchetype = self.archetypes[archIndex]
@@ -1260,7 +1081,7 @@ function QueryViewer.View(self: QueryViewer): () -> (EntityId?, ...any)
 				entities = currentArchetype.entities
 				entityCount = #entities
 				entityIndex = 1
-				componentData = currentArchetype.componentData
+				local componentData = currentArchetype.componentData
 				column1 = componentData[c1]
 				column2 = componentData[c2]
 				column3 = componentData[c3]
@@ -1269,12 +1090,171 @@ function QueryViewer.View(self: QueryViewer): () -> (EntityId?, ...any)
 			end
 		end
 	end
+	if numComponents == 6 then
+		local c1, c2, c3, c4, c5, c6 =
+			self.components[1],
+			self.components[2],
+			self.components[3],
+			self.components[4],
+			self.components[5],
+			self.components[6]
+		local archIndex = 1
+		local entities = currentArchetype.entities
+		local entityCount = #entities
+		local entityIndex = 1
+		local column1 = currentArchetype.componentData[c1]
+		local column2 = currentArchetype.componentData[c2]
+		local column3 = currentArchetype.componentData[c3]
+		local column4 = currentArchetype.componentData[c4]
+		local column5 = currentArchetype.componentData[c5]
+		local column6 = currentArchetype.componentData[c6]
 
+		return function()
+			while true do
+				if entityIndex <= entityCount then
+					local entityId = entities[entityIndex]
+					local row = entityIndex
+					entityIndex += 1
+					return entityId, column1[row], column2[row], column3[row], column4[row], column5[row], column6[row]
+				end
+				archIndex += 1
+				currentArchetype = self.archetypes[archIndex]
+				if not currentArchetype then
+					return nil
+				end
+				entities = currentArchetype.entities
+				entityCount = #entities
+				entityIndex = 1
+				local componentData = currentArchetype.componentData
+				column1 = componentData[c1]
+				column2 = componentData[c2]
+				column3 = componentData[c3]
+				column4 = componentData[c4]
+				column5 = componentData[c5]
+				column6 = componentData[c6]
+			end
+		end
+	end
+	if numComponents == 7 then
+		local c1, c2, c3, c4, c5, c6, c7 =
+			self.components[1],
+			self.components[2],
+			self.components[3],
+			self.components[4],
+			self.components[5],
+			self.components[6],
+			self.components[7]
+		local archIndex = 1
+		local entities = currentArchetype.entities
+		local entityCount = #entities
+		local entityIndex = 1
+		local column1 = currentArchetype.componentData[c1]
+		local column2 = currentArchetype.componentData[c2]
+		local column3 = currentArchetype.componentData[c3]
+		local column4 = currentArchetype.componentData[c4]
+		local column5 = currentArchetype.componentData[c5]
+		local column6 = currentArchetype.componentData[c6]
+		local column7 = currentArchetype.componentData[c7]
+
+		return function()
+			while true do
+				if entityIndex <= entityCount then
+					local entityId = entities[entityIndex]
+					local row = entityIndex
+					entityIndex += 1
+					return entityId,
+						column1[row],
+						column2[row],
+						column3[row],
+						column4[row],
+						column5[row],
+						column6[row],
+						column7[row]
+				end
+				archIndex += 1
+				currentArchetype = self.archetypes[archIndex]
+				if not currentArchetype then
+					return nil
+				end
+				entities = currentArchetype.entities
+				entityCount = #entities
+				entityIndex = 1
+				local componentData = currentArchetype.componentData
+				column1 = componentData[c1]
+				column2 = componentData[c2]
+				column3 = componentData[c3]
+				column4 = componentData[c4]
+				column5 = componentData[c5]
+				column6 = componentData[c6]
+				column7 = componentData[c7]
+			end
+		end
+	end
+	if numComponents == 8 then
+		local c1, c2, c3, c4, c5, c6, c7, c8 =
+			self.components[1],
+			self.components[2],
+			self.components[3],
+			self.components[4],
+			self.components[5],
+			self.components[6],
+			self.components[7],
+			self.components[8]
+		local archIndex = 1
+		local entities = currentArchetype.entities
+		local entityCount = #entities
+		local entityIndex = 1
+		local column1 = currentArchetype.componentData[c1]
+		local column2 = currentArchetype.componentData[c2]
+		local column3 = currentArchetype.componentData[c3]
+		local column4 = currentArchetype.componentData[c4]
+		local column5 = currentArchetype.componentData[c5]
+		local column6 = currentArchetype.componentData[c6]
+		local column7 = currentArchetype.componentData[c7]
+		local column8 = currentArchetype.componentData[c8]
+		return function()
+			while true do
+				if entityIndex <= entityCount then
+					local entityId = entities[entityIndex]
+					local row = entityIndex
+					entityIndex += 1
+					return entityId,
+						column1[row],
+						column2[row],
+						column3[row],
+						column4[row],
+						column5[row],
+						column6[row],
+						column7[row],
+						column8[row]
+				end
+				archIndex += 1
+				currentArchetype = self.archetypes[archIndex]
+				if not currentArchetype then
+					return nil
+				end
+				entities = currentArchetype.entities
+				entityCount = #entities
+				entityIndex = 1
+				local componentData = currentArchetype.componentData
+				column1 = componentData[c1]
+				column2 = componentData[c2]
+				column3 = componentData[c3]
+				column4 = componentData[c4]
+				column5 = componentData[c5]
+				column6 = componentData[c6]
+				column7 = componentData[c7]
+				column8 = componentData[c8]
+			end
+		end
+	end
 	local archIndex = 1
 	local entityIndex = 1
 	local entities = currentArchetype.entities
 	local entityCount = #entities
 	local components = self.components
+	local componentArrays = table.create(numComponents)
+	local componentValues = table.create(numComponents)
 	local componentData = currentArchetype.componentData
 	for i, componentId in components do
 		componentArrays[i] = componentData[componentId]
@@ -1286,7 +1266,7 @@ function QueryViewer.View(self: QueryViewer): () -> (EntityId?, ...any)
 				local entityId = entities[entityIndex]
 				local row = entityIndex
 				for i = 1, numComponents do
-					componentValues[i] = componentArrays[i] and componentArrays[i][row]
+					componentValues[i] = componentArrays[i][row]
 				end
 				entityIndex += 1
 				return entityId, table.unpack(componentValues, 1, numComponents)
@@ -1309,12 +1289,6 @@ function QueryViewer.View(self: QueryViewer): () -> (EntityId?, ...any)
 	end
 end
 
---[[
-    @function Yumina.Query
-    @description Creates a query for entities matching component criteria
-    @param components { ComponentId } Array of component IDs to query for
-    @return QueryViewer Query iterator
-]]
 function Yumina.Query(self: Yumina, components: { ComponentId }): QueryViewer
 	if #components == 1 then
 		local componentId = components[1]
@@ -1341,6 +1315,15 @@ function Yumina.Query(self: Yumina, components: { ComponentId }): QueryViewer
 				result[#result + 1] = archetype
 			end
 		end
+
+		table.sort(result, function(a: Archetype, b: Archetype)
+			local aComponents = #a.componentData
+			local bComponents = #b.componentData
+			if aComponents ~= bComponents then
+				return aComponents < bComponents
+			end
+			return a.entityCount < b.entityCount
+		end)
 
 		local query = __NewQuery({
 			archetypes = result,
@@ -1385,6 +1368,15 @@ function Yumina.Query(self: Yumina, components: { ComponentId }): QueryViewer
 			end
 		end
 
+		table.sort(result, function(a: Archetype, b: Archetype)
+			local aComponents = #a.componentData
+			local bComponents = #b.componentData
+			if aComponents ~= bComponents then
+				return aComponents < bComponents
+			end
+			return a.entityCount < b.entityCount
+		end)
+
 		local query = __NewQuery({
 			archetypes = result,
 			includeBitmasks = {
@@ -1426,6 +1418,15 @@ function Yumina.Query(self: Yumina, components: { ComponentId }): QueryViewer
 		end
 	end
 
+	table.sort(result, function(a: Archetype, b: Archetype)
+		local aComponents = #a.componentData
+		local bComponents = #b.componentData
+		if aComponents ~= bComponents then
+			return aComponents < bComponents
+		end
+		return a.entityCount < b.entityCount
+	end)
+
 	local query = __NewQuery({
 		archetypes = result,
 		includeBitmasks = queryBitmasks,
@@ -1437,20 +1438,6 @@ function Yumina.Query(self: Yumina, components: { ComponentId }): QueryViewer
 	return query
 end
 
-local function ValidateEdge(edge: Edge): { Edge }
-	return edge
-		and edge.from
-		and edge.to
-		and edge.componentId
-		and edge.transition
-		and edge.from.addEdges
-		and edge.to.removeEdges
-end
-
---[[
-    @function Yumina.Cleanup
-    @description Performs cache cleanup and maintenance
-]]
 function Yumina.Cleanup(self: Yumina): ()
 	if self._nextId >= ENTITY_MASK then
 		ThrowError(ERROR_TYPE.MEMORY_ERROR, "Entity ID space exhausted")
@@ -1467,28 +1454,22 @@ function Yumina.Cleanup(self: Yumina): ()
 	end
 
 	for id, archetype in emptyArchetypes do
-		for componentId, edge in archetype.addEdges do
-			if edge and ValidateEdge(edge) then
-				edge.from.addEdges[componentId] = nil
-				edge.to.removeEdges[componentId] = nil
-
-				if edge and edge.next and ValidateEdge(edge.next) then
-					edge.next.prev = edge.prev
-				end
-				if edge and edge.next and edge.prev and ValidateEdge(edge.prev) then
-					edge.prev.next = edge.next
-				end
-
-				local transitionKey = GetTransitionKey(edge.from.bitmasks, edge.to.bitmasks)
-				self._edgeCache[transitionKey] = nil
-			end
-		end
-
-		archetype.addEdges = {}
-		archetype.removeEdges = {}
-		archetype.edgeRefs = { next = nil, prev = nil }
 		archetype.componentData = {}
 		self._archetypeIndex[id] = nil
+	end
+
+	for sourceKey, transitions in self._columnTransitions do
+		local sourceArchetype = self._archetypeIndex[sourceKey]
+		if not sourceArchetype or sourceArchetype.entityCount == 0 then
+			self._columnTransitions[sourceKey] = nil
+		else
+			for destKey, _ in transitions do
+				local destArchetype = self._archetypeIndex[destKey]
+				if not destArchetype or destArchetype.entityCount == 0 then
+					transitions[destKey] = nil
+				end
+			end
+		end
 	end
 
 	local function MatchesQuery(archetype: Archetype, includeBits: { number }, excludeBits: { number }): boolean
@@ -1534,6 +1515,7 @@ function Yumina.Cleanup(self: Yumina): ()
 			query.archetypes = updatedArchetypes
 		end
 	end
+
 	for _, archetype in dirtyArchetypes do
 		archetype.dirtyFlags = 0
 	end

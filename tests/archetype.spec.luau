@@ -100,7 +100,7 @@ TEST_F("archetype", "reuse")(function()
 	ASSERT_EQ(archetype1.entityCount, 2)
 end)
 
-TEST_F("archetype", "edge_caching")(function()
+TEST_F("archetype", "column_transition_caching")(function()
 	local ecs = yumina.new()
 	local entity1 = ecs:Entity()
 	local entity2 = ecs:Entity()
@@ -108,20 +108,24 @@ TEST_F("archetype", "edge_caching")(function()
 	ecs:Set(entity1, POSITION, { x = 1, y = 2 })
 	ecs:Set(entity1, VELOCITY, { x = 3, y = 4 })
 
-	local init_edge_count = 0
-	for _ in ecs._edgeCache do
-		init_edge_count += 1
+	local init_transition_count = 0
+	for _, transitions in ecs._columnTransitions do
+		for _ in transitions do
+			init_transition_count += 1
+		end
 	end
 
 	ecs:Set(entity2, POSITION, { x = 5, y = 6 })
 	ecs:Set(entity2, VELOCITY, { x = 7, y = 8 })
 
-	local final_edge_count = 0
-	for _ in ecs._edgeCache do
-		final_edge_count += 1
+	local final_transition_count = 0
+	for _, transitions in ecs._columnTransitions do
+		for _ in transitions do
+			final_transition_count += 1
+		end
 	end
 
-	ASSERT_EQ(init_edge_count, final_edge_count)
+	ASSERT_EQ(init_transition_count, final_transition_count)
 end)
 
 TEST_F("archetype", "sequential_add_remove")(function()
