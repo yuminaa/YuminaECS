@@ -1,5 +1,0 @@
-std = "luau"
-
-[lints]
-global_usage = "allow"
-empty_loop = "allow"

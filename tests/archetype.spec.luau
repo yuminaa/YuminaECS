@@ -183,4 +183,43 @@ TEST_F("archetype", "rapid_state_change")(function()
 	ASSERT_EQ(archetype.entityCount, 1)
 end)
 
+TEST_F("archetype", "visualize_transitions")(function()
+	local ecs = yumina.new()
+
+	local function print_transitions()
+		print("\nArchetypes:")
+		for _, archetype in ecs._archetypeIndex do
+			print(
+				"Archetype: "
+					.. string.format(
+						"[%d,%d,%d] count:%d",
+						archetype.bitmasks[1],
+						archetype.bitmasks[2],
+						archetype.bitmasks[3],
+						archetype.entityCount
+					)
+			)
+			for _, transitions in ecs._columnTransitions do
+				for _, transition in transitions do
+					if transition.sourceColumns == archetype.componentData then
+						print("  -> Components shared: " .. table.concat(transition.sharedComponents, ","))
+					end
+				end
+			end
+		end
+	end
+
+	local e1 = ecs:Entity()
+	print_transitions()
+
+	ecs:Set(e1, POSITION, { x = 1, y = 1 })
+	print_transitions()
+
+	ecs:Set(e1, VELOCITY, { x = 1, y = 1 })
+	print_transitions()
+
+	ecs:Remove(e1, POSITION)
+	print_transitions()
+end)
+
 RUN_ALL_TESTS()

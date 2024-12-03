@@ -231,4 +231,24 @@ do -- // Mixed operations
 	end)
 end
 
+bench.CASE("cleanup_benchmark", function()
+	local ecs = yumina.new()
+	local A, B = 1, 2
+
+	for i = 1, N do
+		local e = ecs:Entity()
+		if i % 2 == 0 then
+			ecs:Set(e, A, 1)
+		end
+		if i % 3 == 0 then
+			ecs:Set(e, B, 1)
+		end
+		if i % 5 == 0 then
+			ecs:Remove(e, A)
+		end
+	end
+
+	ecs:Cleanup()
+end)
+
 RUN_ALL_BENCHMARKS()

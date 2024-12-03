@@ -2,6 +2,7 @@
   "aliases": {
     "jecs": "vendor/jecs/jecs",
     "yumina": "yumina",
+    "old_yumina": "old_yumina",
     "test_runner": "modules/test_runner"
   },
   "languageMode": "strict"

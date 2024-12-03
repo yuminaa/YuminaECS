@@ -4,7 +4,8 @@
     "@jecs": "./vendor/jecs/jecs.luau",
     "@tests": "./tests",
     "@test_runner": "./modules/test_runner.luau",
-    "@yumina": "./yumina.luau"
+    "@yumina": "./yumina.luau",
+    "@old_yumina": "./old_yumina.luau"
   },
   "editor.formatOnSave": true,
   "stylua.searchParentDirectories": true,
